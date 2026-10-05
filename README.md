@@ -35,7 +35,7 @@ node server.mjs
 
 已發布：https://johnnyweb-art.github.io/yzutree_survey/
 
-3 分鐘繁體中文字幕教學位於 `media/tree-height-tutorial.mp4`，由 `tools/make_tutorial.py` 製作，無配音、非實機錄影。量樹高旁的教學按鈕可前往量測指南播放。部署必須包含整個 `media/`；不要上傳 `.video-tools/` 建置依賴。
+5 分 42 秒繁體中文旁白與字幕教學位於 `media/tree-height-tutorial.mp4`，由 `tools/make_tutorial.py` 製作，合成旁白、非實機錄影。量樹高旁的教學按鈕可前往量測指南播放。部署必須包含整個 `media/`；不要上傳 `.video-tools/` 建置依賴。
 
 ## 現場量測程序
 
@@ -100,7 +100,7 @@ node server.mjs
 
 ## 0.2 操作教學與量測改善（2026-10-05）
 
-- 3 分鐘繁體中文字幕動畫：前置準備、基本資料、樹高站位、鏡頭高度、校正、樹基／樹頂、冠幅、樹旁 GPS、保存與備份。無配音，圖形及介面均為示意，非實機錄影。
+- 5 分 42 秒繁體中文旁白與字幕動畫：前置準備、基本資料、樹高站位、鏡頭高度、校正、樹基／樹頂、冠幅、樹旁 GPS、保存與備份。採 Windows 繁體中文合成旁白，圖形及介面均為示意，非實機錄影。
 - 首頁区分樹旁 GPS 與退開量樹高，GPS 不作為樹高或冠幅的量尺。
 - 可選捲尺量得水平基線：H = D × (tan α − tan β)。仍限定平地、樹頂在基部上方、同站位及鏡頭高度，沒有宣稱消除所有量測誤差。
 - 不預填鏡頭高度；每次開啟量測重設校正。校正採穩定樣本平均，免用單次晃動角度。
@@ -111,3 +111,7 @@ node server.mjs
 方法依據：https://research.fs.usda.gov/treesearch/46037
 定位 API：https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/watchPosition
 定位精度定義：https://developer.mozilla.org/en-US/docs/Web/API/GeolocationCoordinates/accuracy
+
+
+### 旁白重製
+先在 Windows 執行 `powershell -File tools/make_narration.ps1`，再執行影片製作 Python 腳本。旁白文字在 `media/narration.json`；各段停留時間依語音長度加上留白自動產生，不加速朗讀。
