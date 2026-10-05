@@ -1,6 +1,6 @@
 # 木測｜元智校園樹木盤查原型
 
-手機網頁量測原型，版本 0.1。HTML / CSS / JavaScript，無外部 CDN、無安裝依賴，可部署至 GitHub Pages。所有盤查資料在目前瀏覽器本機儲存，不會送到伺服器。
+手機網頁量測原型，版本 0.2。HTML / CSS / JavaScript，無外部 CDN、無安裝依賴，可部署至 GitHub Pages。所有盤查資料在目前瀏覽器本機儲存，不會送到伺服器。
 
 ## 已實作
 
@@ -33,11 +33,13 @@ node server.mjs
 
 官方說明：https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site
 
-目前僅完成本機原型，尚未連接或發布到 GitHub repository。
+已發布：https://johnnyweb-art.github.io/yzutree_survey/
+
+3 分鐘繁體中文字幕教學位於 `media/tree-height-tutorial.mp4`，由 `tools/make_tutorial.py` 製作，無配音、非實機錄影。量樹高旁的教學按鈕可前往量測指南播放。部署必須包含整個 `media/`；不要上傳 `.video-tools/` 建置依賴。
 
 ## 現場量測程序
 
-1. 先以捲尺量出鏡頭離地高度，輸入 App（預填 1.50 m 必須依實際值調整）。
+1. 先以捲尺量出鏡頭離地高度，輸入 App（不預填，請輸入實際量得值）。
 2. 直向握持、使用後置相機。鏡頭瞄準與鏡頭同高的標記，按水平校正。不是平放手機後歸零。
 3. 樹高：在與樹基等高的平坦地面，同站位、同鏡頭高度，先記錄樹基俯角，再記錄樹頂仰角。
 4. 冠幅：找出兩端樹冠的**垂直地面投影**，鏡頭位於一端上方，瞄準另一端的地面。東西向及南北向各做一次；建議同伴指認端點。樹影不是垂直投影。
@@ -94,3 +96,18 @@ node server.mjs
 - WebXR 相容性：https://developer.mozilla.org/en-US/docs/Web/API/WebXR_Device_API
 
 資料來源為使用者提供的課程計算表。估算為碳存量基線，不等於年固碳量、淨碳匯或碳權；不含土壤、枯枝落葉、草本與灌木，未扣除維護碳足跡，森林模型用於校園孤立木有不確定性。
+
+
+## 0.2 操作教學與量測改善（2026-10-05）
+
+- 3 分鐘繁體中文字幕動畫：前置準備、基本資料、樹高站位、鏡頭高度、校正、樹基／樹頂、冠幅、樹旁 GPS、保存與備份。無配音，圖形及介面均為示意，非實機錄影。
+- 首頁区分樹旁 GPS 與退開量樹高，GPS 不作為樹高或冠幅的量尺。
+- 可選捲尺量得水平基線：H = D × (tan α − tan β)。仍限定平地、樹頂在基部上方、同站位及鏡頭高度，沒有宣稱消除所有量測誤差。
+- 不預填鏡頭高度；每次開啟量測重設校正。校正採穩定樣本平均，免用單次晃動角度。
+- GPS 在樹旁取樣最多 20 秒，選手機回報精度最佳的有效讀值；不宣稱其回報精度等於實際誤差。可提前停止，離開盤查頁也會停止。
+- 捲尺方法與水平距離會保留於原始量測 JSON 及 Excel 原始紀錄欄，原課程碳計算公式未更改。
+- 軟體測試包含兩種樹高方法、缺漏與非法輸入、GPS 過期／無效讀值、Excel 方法保存。手機相機／角度／GPS 實地準確度仍需 iPhone 與 Android 比對。
+
+方法依據：https://research.fs.usda.gov/treesearch/46037
+定位 API：https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/watchPosition
+定位精度定義：https://developer.mozilla.org/en-US/docs/Web/API/GeolocationCoordinates/accuracy

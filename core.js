@@ -14,6 +14,19 @@ export function treeHeight(phoneHeight,baseAngle,topAngle) {
   if (!(topAngle>0 && topAngle<=60)) throw Error('樹頂仰角須大於 0° 且不超過 60°，請退後再量。');
   return {distance,height:distance*(Math.tan(radians(topAngle))-Math.tan(radians(baseAngle)))};
 }
+// Tape supplies the horizontal baseline; angle errors no longer determine it.
+export function treeHeightFromDistance(distance,baseAngle,topAngle) {
+  if (!Number.isFinite(distance)||distance<=0||distance>100) throw Error('請輸入捲尺量得的水平距離（大於 0、至多 100 m），不可用 GPS 距離。');
+  if (!Number.isFinite(baseAngle)||baseAngle>=0||baseAngle< -75) throw Error('請瞄準低於鏡頭的樹基地面，俯角須小於 0° 且不低於 -75°。');
+  if (!Number.isFinite(topAngle)||topAngle<=0||topAngle>60) throw Error('樹頂仰角須大於 0° 且不超過 60°；調整站位後重新量距離。');
+  return {distance,height:distance*(Math.tan(radians(topAngle))-Math.tan(radians(baseAngle)))};
+}
+export function betterPosition(best,position,startedAt) {
+  const c=position.coords;
+  if(!c||!Number.isFinite(c.latitude)||!Number.isFinite(c.longitude)||Math.abs(c.latitude)>90||Math.abs(c.longitude)>180||!Number.isFinite(c.accuracy)||c.accuracy<=0||!Number.isFinite(position.timestamp)||position.timestamp<startedAt) return best;
+  if(best&&best.accuracy<=c.accuracy)return best;
+  return {lat:c.latitude,lon:c.longitude,accuracy:c.accuracy,timestamp:new Date(position.timestamp).toISOString()};
+}
 export function calculate(record,species) {
   if (!Number.isFinite(Number(record.circumferences[0])) || !(Number(record.circumferences[0])>0)) throw Error('請填寫第一根樹幹周長。');
   const cs=record.circumferences.filter(v=>v!==null && v!=='' && v!==undefined).map(Number);

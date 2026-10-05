@@ -7,3 +7,5 @@
 .submit #save-label{font-size:1rem;color:white}.edit-record{padding:6px 12px;min-height:36px;font-size:.8rem;margin-top:10px}
 
 @media(max-width:650px){.camera-panel{position:sticky;top:76px;z-index:1;height:220px}.dialog-header{z-index:3}.dialog-footer{position:sticky;bottom:-16px;background:white;padding:12px 0;margin-bottom:-8px;z-index:2}.dialog-footer button{flex:1}}
+
+.quick-start .grid{margin:12px 0}.quick-start button{margin-top:14px}.prep-help{margin:0 0 16px;background:#f4f7f5;padding:12px;border-radius:10px;font-size:.86rem}.prep-help summary{cursor:pointer;font-weight:700}.prep-help ol{padding-left:22px}.prep-help li{margin:8px 0}#height-method-wrap{margin-bottom:16px}#height-method-wrap label{margin-bottom:10px}.tutorial-link{margin-top:8px;font-size:.76rem;padding:7px 10px}.gps-row>div{min-width:0}.gps-row>div:last-child{display:grid;gap:8px}.quick-start p{overflow-wrap:anywhere}@media(max-width:650px){.quick-start .two{grid-template-columns:1fr}.measurement-row{flex-wrap:wrap}.prep-help{font-size:.82rem}}

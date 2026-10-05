@@ -1,4 +1,4 @@
-import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1} from './core.js';
+import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1,treeHeightFromDistance,betterPosition} from './core.js';
 import {buildWorkbook} from './excel.js';
 const $=id=>document.getElementById(id),key='yzu-tree-survey-v1';
 let catalog,template,records=[],gps=null,measurements={},stream=null,sensor=null,samples=[],offset=0,calibrated=false,mode='height',captures=[],pending=null,orientationEnabled=false,storageFailed=false,editingId=null;
@@ -6,7 +6,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,5000);}
 function error(id,message){$(id).textContent=message;$(id).hidden=!message;}
 function localDate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function showPage(page){document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==`page-${page}`);document.querySelectorAll('.nav').forEach(el=>el.classList.toggle('active',el.dataset.page===page));if(page==='records')renderRecords();window.scrollTo({top:0,behavior:'smooth'});}
+function showPage(page){if(gpsRun)finishGPS();if(page!=="guide")document.getElementById("tutorial-video")?.pause();document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==`page-${page}`);document.querySelectorAll('.nav').forEach(el=>el.classList.toggle('active',el.dataset.page===page));if(page==='records')renderRecords();window.scrollTo({top:0,behavior:'smooth'});}
 document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>showPage(el.dataset.page)));
 $('guide-link').addEventListener('click',e=>{e.preventDefault();showPage('guide');});
 function idValue(){return `${$('zone').value}-${$('student-id').value.trim().slice(-4)}-${$('sequence').value}`;}
@@ -30,12 +30,12 @@ $('survey-form').addEventListener('input',renderResult);
 function persist(next){if(storageFailed)throw Error('原有本機資料無法讀取，已停止覆寫。請先匯出或檢查瀏覽器儲存。');try{localStorage.setItem(key,JSON.stringify({version:1,records:next}));}catch{throw Error('此瀏覽器無法保存資料或空間不足，請先匯出備份。');}records=next;}
 $('survey-form').addEventListener('submit',e=>{
   e.preventDefault();error('form-error','');try{
-    const r=getRecord();r.result=validateRecord(r,catalog,records.filter(x=>x.id!==editingId));
+    if(gpsRun)throw Error('請等定位完成，或先按「停止取樣並採用」。');const r=getRecord();r.result=validateRecord(r,catalog,records.filter(x=>x.id!==editingId));
     if(!Number.isInteger(r.photoCount)||r.photoCount<0)throw Error('照片張數須為零或正整數。');
     const prior=records.find(x=>x.id===editingId);
     if(prior){const {revisions,...snapshot}=prior;r.revisions=[...(revisions??[]),snapshot];persist(records.map(x=>x.id===editingId?r:x));}else persist([...records,r]);
     editingId=null;$('save-label').textContent='儲存這棵樹並計算';$('cancel-edit').hidden=true;$('nav-count').textContent=records.length;toast(`已儲存 ${r.id}；${r.photoCount<4?'照片待補。':'手機估測紀錄。'}`);
-    $('sequence').value=r.sequence+1;for(const id of ['c1','c2','c3','notes','inat'])$(id).value='';$('photo-count').value='0';$('identification').value='L0';gps=null;measurements={};
+    $('sequence').value=r.sequence+1;for(const id of ['c1','c2','c3','notes','inat'])$(id).value='';$('photo-count').value='0';$('identification').value='L0';gps=null;measurements={};$('at-tree').checked=false;
     for(const id of ['height-output','ew-output','ns-output'])$(id).innerHTML='— <small>m</small>';$('gps-output').textContent='請站在下一棵樹旁取得 GPS';renderResult();showPage('records');
   }catch(e){error('form-error',e.message);}
 });
@@ -56,14 +56,46 @@ function editRecord(r){
   $('save-label').textContent='儲存修正並重新計算';$('cancel-edit').hidden=false;error('form-error','');renderResult();showPage('survey');
 }
 $('cancel-edit').addEventListener('click',()=>{editingId=null;$('save-label').textContent='儲存這棵樹並計算';$('cancel-edit').hidden=true;$('survey-form').reset();$('date').value=localDate();gps=null;measurements={};for(const id of ['height-output','ew-output','ns-output'])$(id).innerHTML='— <small>m</small>';$('gps-output').textContent='請站在樹旁取得 GPS';renderResult();showPage('records');});
+let gpsRun=null;
+function finishGPS(message=''){
+  if(!gpsRun)return;
+  const run=gpsRun;gpsRun=null;clearTimeout(run.timer);navigator.geolocation.clearWatch(run.watch);
+  gps=run.best?{...run.best,samples:run.count,selection:'20 秒內手機回報精度最佳的讀值'}:null;
+  $('get-gps').disabled=false;$('get-gps').textContent='樹旁重新定位';$('finish-gps').hidden=true;
+  $('gps-output').textContent=gps?`${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}｜回報精度約 ${Math.round(gps.accuracy)} m，${run.count} 次有效回報。${gps.accuracy>15?'定位範圍偏大，建議在樹旁重取並補地標。':'已採用；仍請核對樹木編號。'}`:(message||'尚未取得座標，請確認手機定位與瀏覽器權限，再於樹旁重試。');
+}
+$('finish-gps').addEventListener('click',()=>finishGPS());
+$('at-tree').addEventListener('change',()=>{if(!$('at-tree').checked&&gpsRun){gpsRun.best=null;finishGPS('已取消。請到樹幹旁站定後重新定位。');}});
 $('get-gps').addEventListener('click',()=>{
+  if(!$('at-tree').checked){toast('先走到樹幹旁，勾選站位確認。GPS 不用在量樹高的遠處取得。');return;}
   if(!navigator.geolocation){toast('此瀏覽器不支援定位，請改用手機 Safari 或 Chrome。');return;}
-  const button=$('get-gps');button.disabled=true;button.textContent='定位中…';$('gps-output').textContent='請在樹旁停留，等待定位。';
-  navigator.geolocation.getCurrentPosition(position=>{gps={lat:position.coords.latitude,lon:position.coords.longitude,accuracy:position.coords.accuracy,timestamp:new Date(position.timestamp).toISOString()};$('gps-output').textContent=`${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}｜精度約 ${Math.round(gps.accuracy)} m${gps.accuracy>15?'，建議重取':''}`;button.disabled=false;button.textContent='重新定位';},e=>{button.disabled=false;button.textContent='取得位置';$('gps-output').textContent=e.code===1?'定位權限未開啟，請在瀏覽器設定允許。':e.code===3?'定位逾時，請移至較開闊處重試。':'暫時無法定位，請檢查手機定位設定。';},{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+  if(gpsRun)return;
+  gps=null;const run={best:null,count:0,startedAt:Date.now(),watch:null,timer:null};gpsRun=run;
+  $('get-gps').disabled=true;$('finish-gps').hidden=false;$('get-gps').textContent='定位取樣中…';$('gps-output').textContent='請在樹幹旁停留 20 秒；不要走回量樹高的站位。';
+  try{run.watch=navigator.geolocation.watchPosition(position=>{
+    if(gpsRun!==run)return;
+    const accepted=betterPosition(null,position,run.startedAt);if(!accepted)return;
+    run.count++;run.best=betterPosition(run.best,position,run.startedAt);
+    $('gps-output').textContent=`已收到 ${run.count} 次有效回報，最佳回報精度約 ${Math.round(run.best.accuracy)} m。請在樹旁繼續站定。`;
+  },e=>{if(gpsRun!==run)return;if(e.code===1){run.best=null;finishGPS('定位權限未開啟。請在手機定位服務及此網站權限中允許，再重試。');}else $('gps-output').textContent='定位暫時不穩，仍在等待。請留在樹旁；沒有讀值時稍後重試。';},{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  run.timer=setTimeout(()=>finishGPS(),20000);
+  }catch{finishGPS('無法啟動定位，請確認手機定位與瀏覽器權限。');}
 });
+window.addEventListener('pagehide',()=>{if(gpsRun)finishGPS();});
 function stopCamera(){stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;}
-function resetCapture(){captures=[];pending=null;$('measure-result').hidden=true;$('use-measure').disabled=true;$('capture-angle').disabled=false;error('measure-error','');$('capture-progress').textContent='';$('capture-angle').textContent=mode==='height'?'記錄樹基角度':'記錄另一端地面角度';}
-function openMeasure(next){mode=next;resetCapture();$('level-ground').checked=false;$('direction-check').checked=false;$('direction-check-wrap').hidden=mode==='height';$('measure-title').textContent=mode==='height'?'量樹高':mode==='ew'?'量東西向冠幅':'量南北向冠幅';$('measure-instructions').textContent=mode==='height'?'站在平坦地面，先瞄樹基中心，再瞄樹頂。兩次保持同一站位、同一鏡頭高度；樹頂應大致在樹基正上方。':`站在樹冠${mode==='ew'?'西端（或東端）':'南端（或北端）'}的地面投影點，讓鏡頭垂直位於此點上方，瞄準另一端地面投影點。保持鏡頭高度，請同伴協助指認。`;$('camera-placeholder').hidden=false;$('measure-dialog').showModal();}
+function resetCapture(){captures=[];pending=null;$('measure-result').hidden=true;$('use-measure').disabled=true;$('capture-angle').disabled=false;error('measure-error','');$('capture-progress').textContent='';$('capture-angle').textContent=mode==='height'?'記錄樹基角度':'記錄另一端地面角度';updateMeasurementStep();}
+function openMeasure(next){mode=next;calibrated=false;offset=0;sensor=null;samples=[];updateDistanceMode();resetCapture();$('level-ground').checked=false;$('direction-check').checked=false;$('direction-check-wrap').hidden=mode==='height';$('measure-title').textContent=mode==='height'?'量樹高':mode==='ew'?'量東西向冠幅':'量南北向冠幅';$('measure-instructions').textContent=mode==='height'?'站在平坦地面，先瞄樹基中心，再瞄樹頂。兩次保持同一站位、同一鏡頭高度；樹頂應大致在樹基正上方。':`站在樹冠${mode==='ew'?'西端（或東端）':'南端（或北端）'}的地面投影點，讓鏡頭垂直位於此點上方，瞄準另一端地面投影點。保持鏡頭高度，請同伴協助指認。`;$('camera-placeholder').hidden=false;$('measure-dialog').showModal();$('measure-dialog').scrollTop=0;}
+function usingTape(){return mode==='height'&&$('height-method').value==='tape';}
+function updateMeasurementStep(){
+  $('measurement-step').textContent=pending?'完成：檢查結果，再按「帶入紀錄」。':captures.length?'第 3 步／瞄樹頂：原地轉動手機，鏡頭高度不變。':mode==='height'?'第 1 步／準備：量好高度或距離 → 校正。第 2 步／瞄樹基。':'準備：先找兩端地面投影，鏡頭在第一端正上方，瞄第二端。';
+}
+function updateDistanceMode(){
+  const tape=usingTape();$('height-method-wrap').hidden=mode!=='height';$('baseline-wrap').hidden=!tape;$('phone-height-wrap').hidden=tape;
+  $('height-method-hint').textContent=tape?'在平地用捲尺量「鏡頭正下方到樹基」的水平距離；不可用 GPS、步數或斜距。換站位就要重量。':'先量鏡頭離地高度。樹基俯角太小，距離誤差會放大；可改用捲尺距離。';
+  $('ground-confirm-label').textContent=tape?'我確認地面等高，已量好水平距離，會固定站位與鏡頭高度。':'我確認地面等高，已量好鏡頭高度，會固定站位。';
+}
+$('height-method').addEventListener('change',()=>{$('level-ground').checked=false;updateDistanceMode();resetCapture();});
+$('baseline-distance').addEventListener('input',resetCapture);
 document.querySelectorAll('[data-measure]').forEach(el=>el.addEventListener('click',()=>openMeasure(el.dataset.measure)));
 $('close-measure').addEventListener('click',()=>$('measure-dialog').close());$('measure-dialog').addEventListener('close',()=>{stopCamera();sensor=null;samples=[];});
 $('restart-measure').addEventListener('click',resetCapture);
@@ -72,7 +104,7 @@ function onOrientation(e){
   const now=performance.now(),raw=elevation(e.beta,e.gamma);let heading=null;
   if(Number.isFinite(e.webkitCompassHeading)&&(!Number.isFinite(e.webkitCompassAccuracy)||e.webkitCompassAccuracy>=0&&e.webkitCompassAccuracy<=20))heading=e.webkitCompassHeading;
   else if(e.absolute&&e.alpha!=null)heading=(360-e.alpha)%360;
-  sensor={raw,angle:raw-offset,gamma:e.gamma,heading,time:now};samples.push({angle:sensor.angle,time:now});samples=samples.filter(x=>now-x.time<900);
+  sensor={raw,angle:raw-offset,gamma:e.gamma,heading,time:now};samples.push({angle:sensor.angle,raw:sensor.raw,time:now});samples=samples.filter(x=>now-x.time<900);
 }
 setInterval(()=>{
   if(!$('measure-dialog').open)return;
@@ -93,7 +125,7 @@ $('enable-sensors').addEventListener('click',async()=>{
   try{stopCamera();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:'environment'}},audio:false});if(!$('measure-dialog').open){stopCamera();return;}$('camera').srcObject=stream;await $('camera').play();$('camera-placeholder').hidden=true;}
   catch{error('measure-error',`${$('measure-error').textContent} 後置相機未能開啟；請檢查相機權限並使用有後置相機的手機。`.trim());}
 });
-$('calibrate').addEventListener('click',()=>{try{if(!sensor||performance.now()-sensor.time>1500)throw Error('請先啟用感測器。');if(Math.abs(sensor.raw)>12||Math.abs(sensor.gamma)>10)throw Error('請直立握持，鏡頭瞄準同高標記；目前姿勢偏離水平太多。');offset=sensor.raw;calibrated=true;samples=[];resetCapture();toast('已完成水平校正，請重新瞄準量測點。');}catch(e){error('measure-error',e.message);}});
+$('calibrate').addEventListener('click',()=>{try{if(!sensor||performance.now()-sensor.time>1500)throw Error('請先啟用感測器。');if(Math.abs(sensor.raw)>12||Math.abs(sensor.gamma)>10)throw Error('請直立握持，鏡頭瞄準同高標記；目前姿勢偏離水平太多。');if(samples.length<4||samples.at(-1).time-samples[0].time<500||Math.max(...samples.map(s=>s.raw))-Math.min(...samples.map(s=>s.raw))>1)throw Error('對準同高標記後保持穩定至少一秒，再按校正。');offset=samples.reduce((n,s)=>n+s.raw,0)/samples.length;calibrated=true;samples=[];resetCapture();toast('已完成水平校正，請重新瞄準量測點。');}catch(e){error('measure-error',e.message);}});
 $('angle-mode').addEventListener('change',()=>{$('manual-angle-field').hidden=$('angle-mode').value!=='manual';resetCapture();});
 $('phone-height').addEventListener('input',resetCapture);
 function readAngle(){
@@ -109,12 +141,12 @@ function readAngle(){
 $('capture-angle').addEventListener('click',()=>{error('measure-error','');try{
   if(!$('level-ground').checked)throw Error('請先確認地面等高與鏡頭高度。');
   if(mode!=='height'&&!$('direction-check').checked)throw Error('請確認兩端的方位與樹冠地面投影。');
-  const angle=readAngle(),phoneHeight=Number($('phone-height').value),method=$('angle-mode').value==='manual'?'手填工具角度／平地幾何估測':'手機感測器／平地幾何估測';
-  if(mode==='height'&&!captures.length){groundDistance(phoneHeight,angle);captures=[angle];$('capture-progress').textContent=`樹基 ${angle.toFixed(1)}° 已記錄。保持高度與站位，現在瞄準樹頂。`;$('capture-angle').textContent='記錄樹頂角度';return;}
-  const baseAngle=mode==='height'?captures[0]:angle,calc=mode==='height'?treeHeight(phoneHeight,baseAngle,angle):{distance:groundDistance(phoneHeight,baseAngle)};
+  const angle=readAngle(),phoneHeight=Number($('phone-height').value),method=($('angle-mode').value==='manual'?'手填工具角度':'手機感測器')+(usingTape()?'／捲尺水平基線':'／鏡頭高度推距離');
+  if(mode==='height'&&!captures.length){if(usingTape())treeHeightFromDistance(Number($('baseline-distance').value),angle,1);else groundDistance(phoneHeight,angle);captures=[angle];$('capture-progress').textContent=`樹基 ${angle.toFixed(1)}° 已記錄。保持高度與站位，現在瞄準樹頂。`;$('capture-angle').textContent='記錄樹頂角度';updateMeasurementStep();return;}
+  const baseAngle=mode==='height'?captures[0]:angle,calc=mode==='height'?(usingTape()?treeHeightFromDistance(Number($('baseline-distance').value),baseAngle,angle):treeHeight(phoneHeight,baseAngle,angle)):{distance:groundDistance(phoneHeight,baseAngle)};
   const value=round1(mode==='height'?calc.height:calc.distance);
-  pending={value,method,phoneHeight,baseAngle,topAngle:mode==='height'?angle:null,distance:calc.distance,heading:$('angle-mode').value==='sensor'?sensor?.heading:null,calibrationOffset:$('angle-mode').value==='sensor'?offset:null,levelGround:true,recordedAt:new Date().toISOString()};
-  $('measure-result').innerHTML=`<span>${mode==='height'?'樹高':'冠幅'}估測結果</span><strong>${value.toFixed(1)} m</strong><p>${mode==='height'?`推估水平距離 ${calc.distance.toFixed(2)} m · `:''}尚未經捲尺比對</p>`;$('measure-result').hidden=false;$('use-measure').disabled=false;$('capture-angle').disabled=true;
+  pending={value,method,phoneHeight:usingTape()?null:phoneHeight,distanceSource:usingTape()?'tape':'phone-height',baseAngle,topAngle:mode==='height'?angle:null,distance:calc.distance,heading:$('angle-mode').value==='sensor'?sensor?.heading:null,calibrationOffset:$('angle-mode').value==='sensor'?offset:null,levelGround:true,recordedAt:new Date().toISOString()};
+  $('measure-result').innerHTML=`<span>${mode==='height'?'樹高':'冠幅'}估測結果</span><strong>${value.toFixed(1)} m</strong><p>${mode==='height'?`${usingTape()?'實量':'推估'}水平距離 ${calc.distance.toFixed(2)} m · `:''}尚未經實地高度比對</p><p>${!usingTape()&&Math.abs(baseAngle)<10?'樹基俯角小於 10°，誤差容易放大。建議改用捲尺水平距離。':'請換方向複測；差異超過 10% 或 1 m 應重量。'}</p>`;$('measure-result').hidden=false;$('use-measure').disabled=false;$('capture-angle').disabled=true;updateMeasurementStep();
 }catch(e){error('measure-error',e.message);}});
 $('use-measure').addEventListener('click',()=>{if(!pending)return;measurements[mode]=pending;$(mode==='height'?'height-output':mode==='ew'?'ew-output':'ns-output').innerHTML=`${pending.value.toFixed(1)} <small>m</small>`;$('measure-dialog').close();renderResult();});
 function download(data,name,type){const url=URL.createObjectURL(new Blob([data],{type})),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}

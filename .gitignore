@@ -1,0 +1,7 @@
+.test-output/
+node_modules/
+*.log
+.DS_Store
+
+.video-tools/
+__pycache__/
