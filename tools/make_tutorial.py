@@ -2,12 +2,15 @@
 # From project root: python -m pip install --target .video-tools imageio-ffmpeg
 # Then: python tools/make_tutorial.py (Microsoft JhengHei font required)
 from pathlib import Path
-import sys, math, subprocess
+import sys, math, subprocess, wave, json, bisect
 from PIL import Image, ImageDraw, ImageFont
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'.video-tools'))
 import imageio_ffmpeg
 OUT=ROOT/'media'
+DURATIONS=[12]*15
+STARTS=[12*i for i in range(15)]
+TOTAL=180
 # Each scene lasts 12 seconds. Button labels match app v0.2; UI cards are illustrations.
 SCENES=[
 ('跟著 App，完成一棵樹',['先填資料 → 量尺寸','到樹旁定位 → 儲存匯出'],'本片為字幕操作動畫，介面為示意；手機量測精度仍需實測。'),
@@ -36,7 +39,7 @@ def dash(d,a,b,color=GOLD):
  for k in range(0,int(dist),16):
   e=min(k+9,dist);d.line((a[0]+dx*k/dist,a[1]+dy*k/dist,a[0]+dx*e/dist,a[1]+dy*e/dist),fill=color,width=3)
 def frame(t):
- j=min(int(t//12),14);i=KINDS[j];p=(t%12)/12;title,lines,caption=SCENES[j]
+ j=min(bisect.bisect_right(STARTS,t)-1,14);i=KINDS[j];p=(t-STARTS[j])/DURATIONS[j];title,lines,caption=SCENES[j]
  im=Image.new('RGB',(1280,720),'#f5f3eb');d=ImageDraw.Draw(im)
  txt(d,(46,24),'木測 / 元智校園樹木盤查',22);txt(d,(940,28),'操作動畫・介面示意・v0.2',20)
  d.line((46,68,1234,68),fill='#d8ded3',width=2);txt(d,(46,88),title,42)
@@ -101,19 +104,38 @@ def frame(t):
   txt(d,(868,yy),chunk,26,'white');yy+=58
  d.rounded_rectangle((859,476,1217,544),radius=12,fill='#dcefad');txt(d,(875,495),BUTTONS[j],22,GREEN)
  txt(d,(46,590),caption,24)
- d.rounded_rectangle((46,651,1234,659),radius=4,fill='#d6ded1');d.rounded_rectangle((46,651,46+max(8,1188*t/180),659),radius=4,fill=GREEN)
- txt(d,(46,677),'鏡頭高度固定 / 原地轉動 / 先樹基，後樹頂',20);txt(d,(1083,677),f'{int(t)//60:02d}:{int(t)%60:02d} / 03:00',18)
+ d.rounded_rectangle((46,651,1234,659),radius=4,fill='#d6ded1');d.rounded_rectangle((46,651,46+max(8,1188*t/TOTAL),659),radius=4,fill=GREEN)
+ txt(d,(46,677),'鏡頭高度固定 / 原地轉動 / 先樹基，後樹頂',20);txt(d,(1083,677),f'{int(t)//60:02d}:{int(t)%60:02d} / {int(TOTAL)//60:02d}:{int(TOTAL)%60:02d}',18)
  return im
 if __name__=='__main__':
- OUT.mkdir(exist_ok=True);frame(0).save(OUT/'tree-height-poster.jpg',quality=90)
- cmd=[imageio_ffmpeg.get_ffmpeg_exe(),'-y','-f','rawvideo','-pix_fmt','rgb24','-s','1280x720','-r','12','-i','-','-an','-c:v','libx264','-preset','fast','-crf','23','-pix_fmt','yuv420p','-movflags','+faststart',str(OUT/'tree-height-tutorial.mp4')]
+ OUT.mkdir(exist_ok=True)
+ clips=sorted((ROOT/'.test-output/narration').glob('*.wav'))
+ audio_args=['-an']
+ narration=json.loads((OUT/'narration.json').read_text(encoding='utf-8')) if (OUT/'narration.json').exists() else []
+ if len(clips)==15:
+  audio=[];DURATIONS=[]
+  for clip in clips:
+   with wave.open(str(clip),'rb') as w:
+    if w.getparams()[:3]!=(1,2,22050):raise ValueError('Expected mono 16-bit 22050 Hz WAV')
+    n=w.getnframes();raw=w.readframes(n)
+    if n==0:raise ValueError('Narration clip is empty')
+    length=max(12,math.ceil(n/22050+1.6));DURATIONS.append(length)
+    audio.append(b'\0'*int(.6*22050)*2+raw+b'\0'*(length*22050-n-int(.6*22050))*2)
+  STARTS=[];TOTAL=0
+  for length in DURATIONS:STARTS.append(TOTAL);TOTAL+=length
+  wavpath=ROOT/'.test-output/tutorial-narration.wav'
+  with wave.open(str(wavpath),'wb') as w:w.setparams((1,2,22050,0,'NONE','not compressed'));w.writeframes(b''.join(audio))
+  audio_args=['-i',str(wavpath),'-c:a','aac','-b:a','48k']
+ frame(0).save(OUT/'tree-height-poster.jpg',quality=90)
+ cmd=[imageio_ffmpeg.get_ffmpeg_exe(),'-y','-f','rawvideo','-pix_fmt','rgb24','-s','1280x720','-r','12','-i','-']+audio_args+['-c:v','libx264','-preset','fast','-crf','26','-pix_fmt','yuv420p','-movflags','+faststart',str(OUT/'tree-height-tutorial.mp4')]
  proc=subprocess.Popen(cmd,stdin=subprocess.PIPE,stderr=subprocess.DEVNULL)
- for n in range(2160):proc.stdin.write(frame(n/12).tobytes())
+ for n in range(TOTAL*12):proc.stdin.write(frame(n/12).tobytes())
  proc.stdin.close()
  if proc.wait():raise RuntimeError('Encoding failed')
- (OUT/'tutorial-script.txt').write_text('\n\n'.join(f'{i*12}–{(i+1)*12} 秒｜{s[0]}\n'+'\n'.join(s[1])+'\n'+s[2] for i,s in enumerate(SCENES)),encoding='utf-8')
+ (OUT/'tutorial-script.txt').write_text('繁體中文合成旁白｜動畫與介面示意，非實機錄影\n\n'+'\n\n'.join(f'{STARTS[i]}–{STARTS[i]+DURATIONS[i]} 秒｜{scene[0]}\n'+(narration[i] if narration else '\n'.join(scene[1])+'\n'+scene[2]) for i,scene in enumerate(SCENES)),encoding='utf-8')
+ (OUT/'tutorial-timing.json').write_text(json.dumps({'seconds':TOTAL,'starts':STARTS,'durations':DURATIONS}),encoding='utf-8')
  sheet=Image.new('RGB',(960,900),'white')
- for i in range(15):sheet.paste(frame(i*12+7).resize((320,180)),((i%3)*320,(i//3)*180))
+ for i in range(15):sheet.paste(frame(STARTS[i]+DURATIONS[i]*.7).resize((320,180)),((i%3)*320,(i//3)*180))
  (ROOT/'.test-output').mkdir(exist_ok=True)
  sheet.save(ROOT/'.test-output/tutorial-storyboard.jpg')
- print('MP4 bytes:',(OUT/'tree-height-tutorial.mp4').stat().st_size)
+ print('Duration:',TOTAL,'MP4 bytes:',(OUT/'tree-height-tutorial.mp4').stat().st_size)
