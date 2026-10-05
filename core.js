@@ -14,6 +14,13 @@ export function treeHeight(phoneHeight,baseAngle,topAngle) {
   if (!(topAngle>0 && topAngle<=60)) throw Error('樹頂仰角須大於 0° 且不超過 60°，請退後再量。');
   return {distance,height:distance*(Math.tan(radians(topAngle))-Math.tan(radians(baseAngle)))};
 }
+// Both endpoints are on the same ray from a fixed station outside the crown.
+export function crownWidth(phoneHeight,firstAngle,secondAngle) {
+  const firstDistance=groundDistance(phoneHeight,firstAngle),secondDistance=groundDistance(phoneHeight,secondAngle);
+  const width=secondDistance-firstDistance;
+  if(!Number.isFinite(width)||width<0.1)throw Error('第二點必須比第一點更遠，且兩點至少相距 0.1 公尺。請保持站位，先量近端、再量遠端；若站位不對，請重新量測。');
+  return {firstDistance,secondDistance,width};
+}
 // Tape supplies the horizontal baseline; angle errors no longer determine it.
 export function treeHeightFromDistance(distance,baseAngle,topAngle) {
   if (!Number.isFinite(distance)||distance<=0||distance>100) throw Error('請輸入捲尺量得的水平距離（大於 0、至多 100 m），不可用 GPS 距離。');
