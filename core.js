@@ -4,6 +4,21 @@ export const radians = n => n * Math.PI / 180;
 export function elevation(beta,gamma) {
   return Math.asin(Math.max(-1,Math.min(1,-Math.cos(radians(beta))*Math.cos(radians(gamma))))) * 180 / Math.PI;
 }
+// Rear camera looks along device -z; W3C rotation is Z-X'-Y''. Yaw is clockwise from the alpha origin.
+export function cameraDirection(alpha,beta,gamma) {
+  const [a,b,g]=[alpha,beta,gamma].map(radians);
+  const x=-(Math.cos(a)*Math.sin(g)+Math.sin(a)*Math.sin(b)*Math.cos(g)),y=-(Math.sin(a)*Math.sin(g)-Math.cos(a)*Math.sin(b)*Math.cos(g)),z=-Math.cos(b)*Math.cos(g);
+  return {elevation:Math.asin(Math.max(-1,Math.min(1,z)))*180/Math.PI,yaw:(Math.atan2(x,y)*180/Math.PI+360)%360};
+}
+export const turnDelta = (from,to) => ((to-from+540)%360)-180;
+// Station outside the crown: sight line to the trunk, both edges turned to on either side of it.
+export function crownWidthFromTurns(distance,firstTurn,secondTurn) {
+  if (!Number.isFinite(distance)||distance<=0||distance>100) throw Error('距樹幹的水平距離無效，請重新瞄準樹幹。');
+  for (const t of [firstTurn,secondTurn]) if (!Number.isFinite(t)||Math.abs(t)<1||Math.abs(t)>70) throw Error('每一端的轉角須介於 1°–70°；轉角過大時請退後再量。');
+  if (Math.sign(firstTurn)===Math.sign(secondTurn)) throw Error('兩端須分別在樹幹的左右兩側，請轉向另一邊再記錄。');
+  const firstOffset=distance*Math.tan(radians(Math.abs(firstTurn))),secondOffset=distance*Math.tan(radians(Math.abs(secondTurn)));
+  return {distance,firstOffset,secondOffset,width:firstOffset+secondOffset};
+}
 export function groundDistance(phoneHeight,angle) {
   if (!(phoneHeight>=0.5 && phoneHeight<=2.5)) throw Error('手機離地高度須介於 0.5–2.5 公尺。');
   if (!(angle<=-5 && angle>=-75)) throw Error('請調整站位：瞄準地面的俯角須介於 5°–75°。');
