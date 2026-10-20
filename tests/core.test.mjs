@@ -2,7 +2,8 @@ import vm from 'node:vm';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {calculate,treeHeight,groundDistance,crownWidth,elevation,validateRecord,treeHeightFromDistance,betterPosition} from '../core.js';
+import * as core from '../core.js';
+const {calculate,treeHeight,groundDistance,crownWidth,elevation,validateRecord,treeHeightFromDistance,betterPosition,cameraDirection,turnDelta,crownWidthFromTurns}=core;
 import {buildWorkbook} from '../excel.js';
 const catalog=JSON.parse(fs.readFileSync(new URL('../data/catalog.json',import.meta.url)));
 const template=JSON.parse(fs.readFileSync(new URL('../data/workbook-template.json',import.meta.url)));
@@ -67,53 +68,69 @@ test('GPS session stops watcher, keeps best result and ignores callbacks after c
 });
 
 function wizardHarness(){
- const elements=new Map();
+ const elements=new Map(),storage=new Map();
  const element=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:false,disabled:false,textContent:'',innerHTML:'',open:false,scrollTop:0,events:{},querySelector(sel){return element(id+sel);},addEventListener(type,fn){this.events[type]=fn;},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(id);};
- element('height-method').value='tape';
- const context=vm.createContext({document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){}},navigator:{},setInterval(){},setTimeout(){},clearTimeout(){},performance:{now:()=>1000},treeHeightFromDistance,treeHeight,groundDistance,crownWidth,round1:n=>Math.round(n*10)/10,console});
+ const localStorage={getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
+ const context=vm.createContext({...core,document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){},screen:{orientation:{angle:0}},innerWidth:390,innerHeight:844},navigator:{},localStorage,setInterval(){},setTimeout(){},clearTimeout(){},performance:{now:()=>1000},console});
  vm.runInContext(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/init\(\);\s*$/,''),context);
- return {element,context,run:code=>vm.runInContext(code,context),click:id=>element(id).events.click()};
+ return {element,context,storage,run:code=>vm.runInContext(code,context),click:id=>element(id).events.click()};
 }
-test('height wizard enforces preparation and calibration before capture',()=>{
+const down=(h,d)=>-Math.atan(h/d)*180/Math.PI;
+test('camera direction matches elevation mapping and turns clockwise',()=>{
+ for(const [b,g] of [[90,0],[80,0],[120,0],[75,8]])assert.ok(Math.abs(cameraDirection(0,b,g).elevation-elevation(b,g))<1e-9);
+ assert.ok(Math.abs(cameraDirection(0,90,0).yaw)<1e-9);
+ assert.ok(Math.abs(cameraDirection(90,90,0).yaw-270)<1e-9);
+ assert.ok(Math.abs(cameraDirection(-30,80,0).yaw-30)<1e-9);
+ assert.equal(turnDelta(350,10),20);assert.equal(turnDelta(10,350),-20);
+});
+test('crown width from station turns and rejects same-side or extreme turns',()=>{
+ const t=o=>Math.atan(o/10)*180/Math.PI;
+ const r=crownWidthFromTurns(10,-t(3),t(5));assert.ok(Math.abs(r.width-8)<1e-10);assert.ok(Math.abs(r.firstOffset-3)<1e-10);
+ assert.throws(()=>crownWidthFromTurns(10,10,20),/兩側/);
+ assert.throws(()=>crownWidthFromTurns(10,-0.5,20));assert.throws(()=>crownWidthFromTurns(10,-20,75));assert.throws(()=>crownWidthFromTurns(0,-20,20));
+});
+test('height flow needs only lens height, remembers it, and has no calibration gate',()=>{
  const w=wizardHarness(),e=w.element;w.run("openMeasure('height')");
- assert.equal(e('camera-wrap').hidden,true);assert.equal(e('capture-angle').hidden,true);assert.equal(e('use-measure').hidden,true);
- w.click('wizard-next');assert.match(e('measure-error').textContent,/水平距離/);assert.equal(w.run('heightStep'),1);
- e('baseline-distance').value='10';w.click('wizard-next');assert.match(e('measure-error').textContent,/勾選/);
- e('level-ground').checked=true;w.click('wizard-next');assert.equal(w.run('heightStep'),2);assert.equal(e('calibration-controls').hidden,false);assert.equal(e('capture-angle').hidden,true);
- w.click('capture-angle');assert.equal(w.run('captures.length'),0);assert.match(e('measure-error').textContent,/依畫面順序/);
- w.click('calibrate');assert.equal(w.run('heightStep'),2);
- w.run("stream={active:true};sensor={raw:1,gamma:0,time:1000};samples=[{raw:1,time:300},{raw:1,time:500},{raw:1,time:700},{raw:1,time:1000}]");
- w.click('calibrate');assert.equal(w.run('heightStep'),3);assert.equal(w.run('calibrated'),true);assert.equal(e('calibration-controls').hidden,true);assert.equal(e('capture-angle').hidden,false);
+ assert.equal(e('phone-height').value,'');assert.equal(e('capture-angle').hidden,true);
+ w.click('wizard-next');assert.match(e('measure-error').textContent,/鏡頭離地高度/);assert.equal(w.run('step'),1);
+ e('angle-mode').value='manual';e('angle-mode').events.change();
+ e('phone-height').value='1.5';w.click('wizard-next');assert.equal(w.run('step'),2);assert.equal(w.storage.get('yzu-tree-lens-height'),'1.5');
+ assert.equal(e('capture-angle').hidden,false);assert.equal(e('manual-angle-field').hidden,false);
+ e('manual-angle').value=String(down(1.5,10));w.click('capture-angle');assert.equal(w.run('step'),3);assert.match(e('capture-progress').textContent,/10\.0 m/);
+ e('manual-angle').value=String(Math.atan(10.5/10)*180/Math.PI);w.click('capture-angle');assert.equal(w.run('step'),4);assert.equal(w.run('pending.value'),12);assert.equal(e('use-measure').hidden,false);
+ w.click('wizard-back');assert.equal(w.run('step'),3);assert.equal(w.run('pending'),null);assert.equal(w.run('captures.length'),1);
+ w.click('wizard-back');assert.equal(w.run('step'),2);assert.equal(w.run('captures.length'),0);
+ e('manual-angle').value=String(down(1.5,10));w.click('capture-angle');e('manual-angle').value=String(Math.atan(10.5/10)*180/Math.PI);w.click('capture-angle');w.click('use-measure');
+ assert.equal(w.run('measurements.height.value'),12);assert.equal(w.run('measurements.height.distanceSource'),'phone-height');
+ w.run("openMeasure('height')");assert.equal(e('phone-height').value,'1.5');assert.equal(w.run('step'),1);assert.equal(w.run('pending'),null);
 });
-test('height wizard records base then top, backtracks without stale results, and retains tape height',()=>{
- const w=wizardHarness(),e=w.element;w.run("openMeasure('height')");e('baseline-distance').value='10';e('level-ground').checked=true;w.click('wizard-next');
- e('angle-mode').value='manual';e('angle-mode').events.change();assert.equal(w.run('heightStep'),2);w.click('manual-ready');assert.equal(w.run('heightStep'),3);
- e('manual-angle').value='-8.53076561';w.click('capture-angle');assert.equal(w.run('heightStep'),4);assert.equal(e('manual-angle').value,'');assert.equal(e('use-measure').hidden,true);
- e('manual-angle').value='46.39718103';w.click('capture-angle');assert.equal(w.run('heightStep'),5);assert.equal(w.run('pending.value'),12);assert.equal(e('capture-angle').hidden,true);assert.equal(e('use-measure').hidden,false);
- w.click('wizard-back');assert.equal(w.run('heightStep'),4);assert.equal(w.run('pending'),null);assert.equal(e('measure-result').hidden,true);
- w.click('wizard-back');assert.equal(w.run('heightStep'),3);assert.equal(w.run('captures.length'),0);
- e('manual-angle').value='-8.53076561';w.click('capture-angle');e('manual-angle').value='46.39718103';w.click('capture-angle');w.click('use-measure');assert.equal(w.run('measurements.height.value'),12);assert.equal(w.run('measurements.height.distanceSource'),'tape');
- w.run("openMeasure('height')");assert.equal(e('baseline-distance').value,'');assert.equal(w.run('heightStep'),1);assert.equal(w.run('pending'),null);
+test('tape option still gives known height',()=>{
+ const w=wizardHarness(),e=w.element;w.run("openMeasure('height')");e('angle-mode').value='manual';e('height-method').value='tape';e('height-method').events.change();
+ w.click('wizard-next');assert.match(e('measure-error').textContent,/水平距離/);
+ e('baseline-distance').value='10';w.click('wizard-next');assert.equal(w.run('step'),2);
+ e('manual-angle').value='-8.53076561';w.click('capture-angle');e('manual-angle').value='46.39718103';w.click('capture-angle');assert.equal(w.run('pending.value'),12);assert.equal(w.run('pending.distanceSource'),'tape');
 });
-test('crown geometry subtracts near distance and rejects reversed endpoints',()=>{
- const angle=d=>-Math.atan(1.5/d)*180/Math.PI;
- assert.ok(Math.abs(crownWidth(1.5,angle(2),angle(10)).width-8)<1e-10);
- for(const pair of [[10,2],[2,2],[2,2.05]])assert.throws(()=>crownWidth(1.5,angle(pair[0]),angle(pair[1])));
- assert.throws(()=>crownWidth(0,angle(2),angle(10)));
+test('sensor capture uses gravity angle without calibration and rejects shaking',()=>{
+ const w=wizardHarness(),e=w.element;w.run("openMeasure('height')");e('phone-height').value='1.5';
+ w.run("step=2;stream={active:true}");const a=down(1.5,10);
+ w.run(`sensor={raw:${a},angle:${a},yaw:0,gamma:0,frame:'relative',time:1000};samples=[0,200,400,600].map(t=>({angle:${a}+(t===400?3:0),raw:${a},yaw:0,frame:'relative',time:400+t}))`);
+ w.click('capture-angle');assert.match(e('measure-error').textContent,/晃動/);assert.equal(w.run('step'),2);
+ w.run(`samples=[0,200,400,600].map(t=>({angle:${a},raw:${a},yaw:0,frame:'relative',time:400+t}))`);
+ w.click('capture-angle');assert.equal(w.run('step'),3);assert.ok(Math.abs(w.run('captures[0].distance')-10)<1e-9);
+ assert.match(w.run('liveText({angle:45,yaw:0})'),/樹高 ≈ 11\.5 m/);
 });
-for(const axis of ['ew','ns'])test(`${axis} wizard requires preparation, captures two endpoints, retries and persists`,()=>{
+for(const axis of ['ew','ns'])test(`${axis} crown: trunk then both edges by turning, persists raw data`,()=>{
  const w=wizardHarness(),e=w.element;w.run(`openMeasure('${axis}')`);
- assert.equal(e('height-steps').hidden,false);assert.equal(e('capture-angle').hidden,true);assert.equal(e('calibration-controls').hidden,true);
- w.click('wizard-next');assert.equal(w.run('heightStep'),1);
- e('phone-height').value='1.5';e('level-ground').checked=true;w.click('wizard-next');assert.match(e('measure-error').textContent,/方位/);
- e('direction-check').checked=true;w.click('wizard-next');assert.equal(w.run('heightStep'),2);
- e('angle-mode').value='manual';e('angle-mode').events.change();w.click('manual-ready');
- e('manual-angle').value=String(-Math.atan(1.5/2)*180/Math.PI);w.click('capture-angle');assert.equal(w.run('heightStep'),4);assert.equal(w.run('pending'),null);
- e('manual-angle').value='-50';w.click('capture-angle');assert.equal(w.run('heightStep'),4);assert.match(e('measure-error').textContent,/更遠/);
- e('manual-angle').value=String(-Math.atan(1.5/10)*180/Math.PI);w.click('capture-angle');assert.equal(w.run('pending.value'),8);assert.equal(w.run('heightStep'),5);
- w.click('wizard-back');assert.equal(w.run('pending'),null);assert.equal(e('measure-result').hidden,true);
- e('manual-angle').value=String(-Math.atan(1.5/10)*180/Math.PI);w.click('capture-angle');w.click('use-measure');assert.equal(w.run(`measurements.${axis}.value`),8);
- const data=w.run(`measurements.${axis}`);assert.equal(data.geometry,'collinear-near-far-ground');assert.ok(Math.abs(data.firstDistance-2)<1e-10);
- const xml=new TextDecoder().decode(buildWorkbook([{...record,measurements:{...record.measurements,[axis]:data}}],template,catalog));assert.ok(xml.includes('secondAngle'));assert.ok(xml.includes('collinear-near-far-ground'));
- w.run(`openMeasure('${axis}')`);assert.equal(w.run('captures.length'),0);assert.equal(e('phone-height').value,'');assert.equal(e('direction-check').checked,false);
+ assert.equal(e('crown-setup').hidden,false);assert.match(e('crown-setup').innerHTML,axis==='ew'?/正南或正北/:/正東或正西/);
+ e('angle-mode').value='manual';e('angle-mode').events.change();e('phone-height').value='1.5';w.click('wizard-next');assert.equal(w.run('step'),2);
+ e('manual-angle').value=String(down(1.5,10));w.click('capture-angle');assert.equal(w.run('step'),3);assert.match(e('manual-angle-label').textContent,/水平轉角/);
+ const t=o=>Math.atan(o/10)*180/Math.PI;
+ e('manual-angle').value=String(-t(3));w.click('capture-angle');assert.equal(w.run('step'),4);
+ e('manual-angle').value=String(-t(2));w.click('capture-angle');assert.match(e('measure-error').textContent,/另一側/);assert.equal(w.run('step'),4);
+ e('manual-angle').value=String(t(5));w.click('capture-angle');assert.equal(w.run('step'),5);assert.equal(w.run('pending.value'),8);
+ w.click('wizard-back');assert.equal(w.run('step'),4);assert.equal(w.run('pending'),null);
+ e('manual-angle').value=String(t(5));w.click('capture-angle');w.click('use-measure');
+ const data=w.run(`measurements.${axis}`);assert.equal(data.value,8);assert.equal(data.geometry,'station-rotation-perpendicular');assert.ok(Math.abs(data.distance-10)<1e-9);
+ const xml=new TextDecoder().decode(buildWorkbook([{...record,measurements:{...record.measurements,[axis]:data}}],template,catalog));assert.ok(xml.includes('secondTurn'));assert.ok(xml.includes('<v>1210</v>'));
+ w.run(`openMeasure('${axis}')`);assert.equal(w.run('captures.length'),0);assert.equal(w.run('step'),1);
 });
