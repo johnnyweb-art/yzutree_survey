@@ -1,7 +1,7 @@
 import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1,treeHeightFromDistance,betterPosition,cameraDirection,turnDelta,crownWidthFromTurns,radians} from './core.js';
 import {buildWorkbook} from './excel.js';
 const $=id=>document.getElementById(id),key='yzu-tree-survey-v1';
-let catalog,template,records=[],gps=null,measurements={},stream=null,sensor=null,samples=[],offset=0,mode='height',captures=[],pending=null,orientationEnabled=false,storageFailed=false,editingId=null;
+let catalog,template,records=[],gps=null,measurements={},stream=null,sensor=null,samples=[],offset=0,mode='height',captures=[],pending=null,orientationEnabled=false,storageFailed=false,editingId=null,lastDeleted=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,5000);}
 function error(id,message){$(id).textContent=message;$(id).hidden=!message;}
@@ -45,8 +45,22 @@ function renderRecords(){
   $('total-incomplete').textContent=records.filter(r=>r.photoCount<4).length;$('export-excel').disabled=!records.length;$('export-json').disabled=!records.length;
   $('record-list').innerHTML=records.length?records.slice().reverse().map(r=>`<article class="record"><div><h3>${esc(r.species)} <span class="tag light">${esc(r.id)}</span></h3><p>${esc(r.recorder)} · ${esc(r.date)} · 樹高 ${r.height.toFixed(1)} m</p><p>${r.photoCount<4?'照片待補 · ':''}手機估測 · ${r.result.excluded?'此類型不計碳':'通用密度估算'}</p><p>冠幅 ${r.crownEW.toFixed(1)} × ${r.crownNS.toFixed(1)} m · 周長 ${r.circumferences.filter(x=>x!=null).join(' / ')} cm</p></div><div class="record-number">${r.result.excluded?'不適用':r.result.co2.toLocaleString('zh-TW',{minimumFractionDigits:1})}<small>${r.result.excluded?'保留調查紀錄':'kg CO₂ 當量'}</small></div></article>`).join(''):'<div class="empty"><h2>第一棵樹，從這裡開始</h2><p>完成現場盤查並儲存後，紀錄會出現在這裡。</p><button id="empty-start" style="margin-top:20px">開始盤查</button></div>';
   $('empty-start')?.addEventListener('click',()=>showPage('survey'));
-  document.querySelectorAll('.record').forEach((el,index)=>{const button=document.createElement('button');button.type='button';button.textContent='補充／修正';button.className='edit-record';button.addEventListener('click',()=>editRecord(records[records.length-1-index]));el.querySelector('div').append(button);});
+  document.querySelectorAll('.record').forEach((el,index)=>{
+    const r=records[records.length-1-index],actions=document.createElement('div');actions.className='record-actions';
+    const edit=document.createElement('button');edit.type='button';edit.textContent='補充／修正';edit.className='edit-record';edit.addEventListener('click',()=>editRecord(r));
+    const remove=document.createElement('button');remove.type='button';remove.textContent='刪除';remove.className='delete-record';remove.addEventListener('click',()=>deleteRecord(r,remove));
+    actions.append(edit,remove);el.querySelector('div').append(actions);
+  });
 }
+// Two taps instead of confirm(): the first arms the button, the second deletes.
+function deleteRecord(r,button){
+  if(!button.dataset.armed){button.dataset.armed='1';button.textContent='再按一次確定刪除';button.classList.add('armed');clearTimeout(button.timer);button.timer=setTimeout(()=>{delete button.dataset.armed;button.textContent='刪除';button.classList.remove('armed');},4000);return;}
+  clearTimeout(button.timer);
+  try{persist(records.filter(x=>x.id!==r.id));}catch(e){toast(e.message);return;}
+  lastDeleted=r;if(editingId===r.id)cancelEdit(false);
+  renderRecords();toast(`已刪除 ${r.id}。`);$('undo-delete').hidden=false;
+}
+$('undo-delete').addEventListener('click',()=>{if(!lastDeleted)return;try{if(records.some(x=>x.id===lastDeleted.id))throw Error('已有相同編號的紀錄，無法復原。');persist([...records,lastDeleted]);toast(`已復原 ${lastDeleted.id}。`);lastDeleted=null;$('undo-delete').hidden=true;renderRecords();}catch(e){toast(e.message);}});
 function editRecord(r){
   editingId=r.id;gps=structuredClone(r.gps);measurements=structuredClone(r.measurements);
   const fields={zone:r.zone,species:r.species,recorder:r.recorder,'student-id':r.studentId,sequence:r.sequence,date:r.date,health:r.health,c1:r.circumferences[0],c2:r.circumferences[1]??'',c3:r.circumferences[2]??'','photo-count':r.photoCount,identification:r.identification,inat:r.inat,notes:r.notes};
@@ -55,7 +69,8 @@ function editRecord(r){
   $('gps-output').textContent=`${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}｜精度約 ${Math.round(gps.accuracy)} m`;
   $('save-label').textContent='儲存修正並重新計算';$('cancel-edit').hidden=false;error('form-error','');renderResult();showPage('survey');
 }
-$('cancel-edit').addEventListener('click',()=>{editingId=null;$('save-label').textContent='儲存這棵樹並計算';$('cancel-edit').hidden=true;$('survey-form').reset();$('date').value=localDate();gps=null;measurements={};for(const id of ['height-output','ew-output','ns-output'])$(id).innerHTML='— <small>m</small>';$('gps-output').textContent='請站在樹旁取得 GPS';renderResult();showPage('records');});
+function cancelEdit(navigate=true){editingId=null;$('save-label').textContent='儲存這棵樹並計算';$('cancel-edit').hidden=true;$('survey-form').reset();$('date').value=localDate();gps=null;measurements={};for(const id of ['height-output','ew-output','ns-output'])$(id).innerHTML='— <small>m</small>';$('gps-output').textContent='請站在樹旁取得 GPS';renderResult();if(navigate)showPage('records');}
+$('cancel-edit').addEventListener('click',()=>cancelEdit());
 let gpsRun=null;
 function finishGPS(message=''){
   if(!gpsRun)return;
