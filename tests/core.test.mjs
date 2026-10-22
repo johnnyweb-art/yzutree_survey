@@ -69,7 +69,7 @@ test('GPS session stops watcher, keeps best result and ignores callbacks after c
 
 function wizardHarness(){
  const elements=new Map(),storage=new Map();
- const element=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:false,disabled:false,textContent:'',innerHTML:'',open:false,scrollTop:0,events:{},querySelector(sel){return element(id+sel);},addEventListener(type,fn){this.events[type]=fn;},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(id);};
+ const element=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:false,disabled:false,textContent:'',innerHTML:'',open:false,scrollTop:0,events:{},querySelector(sel){return element(id+sel);},addEventListener(type,fn){this.events[type]=fn;},showModal(){this.open=true;},close(){this.open=false;},reset(){}});return elements.get(id);};
  const localStorage={getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
  const context=vm.createContext({...core,document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){},screen:{orientation:{angle:0}},innerWidth:390,innerHeight:844},navigator:{},localStorage,setInterval(){},setTimeout(){},clearTimeout(){},performance:{now:()=>1000},console});
  vm.runInContext(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/init\(\);\s*$/,''),context);
@@ -133,4 +133,16 @@ for(const axis of ['ew','ns'])test(`${axis} crown: trunk then both edges by turn
  const data=w.run(`measurements.${axis}`);assert.equal(data.value,8);assert.equal(data.geometry,'station-rotation-perpendicular');assert.ok(Math.abs(data.distance-10)<1e-9);
  const xml=new TextDecoder().decode(buildWorkbook([{...record,measurements:{...record.measurements,[axis]:data}}],template,catalog));assert.ok(xml.includes('secondTurn'));assert.ok(xml.includes('<v>1210</v>'));
  w.run(`openMeasure('${axis}')`);assert.equal(w.run('captures.length'),0);assert.equal(w.run('step'),1);
+});
+test('delete needs a second tap, can be undone, and cancels editing of that record',()=>{
+ const w=wizardHarness(),e=w.element;
+ const done={...record,result:calculate(record,species)};w.context.fixture=[done,{...done,id:'ZJ-9999-2',sequence:2}];w.run('records=fixture');
+ const button={dataset:{},textContent:'刪除',classList:{add(){},remove(){}}};
+ w.context.deleteButton=button;w.run("deleteRecord(records[0],deleteButton)");
+ assert.equal(w.run('records.length'),2);assert.match(button.textContent,/再按一次/);
+ w.run("editingId='ZJ-9999-1';deleteRecord(records[0],deleteButton)");
+ assert.equal(w.run('records.map(r=>r.id).join()'),'ZJ-9999-2');assert.equal(w.run('editingId'),null);
+ assert.match(w.storage.get('yzu-tree-survey-v1'),/ZJ-9999-2/);assert.doesNotMatch(w.storage.get('yzu-tree-survey-v1'),/ZJ-9999-1/);
+ assert.equal(e('undo-delete').hidden,false);w.click('undo-delete');
+ assert.equal(w.run('records.map(r=>r.id).sort().join()'),'ZJ-9999-1,ZJ-9999-2');assert.equal(e('undo-delete').hidden,true);
 });
