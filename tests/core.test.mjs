@@ -166,3 +166,12 @@ test('catalog carries wood density for every carbon-counted species',()=>{
   assert.equal(fresh.species.find(s=>s.name==='樟樹').density,0.487);
   assert.ok(fresh.species.filter(s=>['棕櫚','竹類'].includes(s.type)).every(s=>s.density===null));
 });
+test('self-check reference angles hold the camera convention',()=>{
+  // 自我檢查畫面以這三個姿態判斷手機軸向是否正常，數值變動等同該畫面失效。
+  const near=(got,want)=>assert.ok(Math.abs(got-want)<1e-6,);
+  near(elevation(0,0),-90);   // 平放桌面、螢幕朝上 -> 鏡頭朝下
+  near(elevation(90,0),0);    // 直立握持 -> 鏡頭水平
+  near(elevation(180,0),90);  // 倒放 -> 鏡頭朝上
+  // 畫面採 ±8° 容許範圍：軸向顛倒的手機（平放讀到 +90）必須被判為不符
+  assert.ok(Math.abs(elevation(180,0)-(-90))>8);
+});

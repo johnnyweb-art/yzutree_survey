@@ -278,4 +278,57 @@ async function init(){try{
   try{const raw=localStorage.getItem(key);if(raw){const saved=JSON.parse(raw);if(saved.version!==1||!Array.isArray(saved.records))throw Error('版本不符');const checked=[];for(const r of saved.records)checked.push(checkImportedRecord(r,checked));records=checked;}}catch{storageFailed=true;toast('本機資料無法讀取，已停止覆寫。請保留瀏覽器資料並檢查備份。');}
   renderRecords();renderResult();
 }catch(e){error('form-error',`初始化失敗：${e.message}。請使用網頁伺服器開啟，勿直接雙擊 HTML。`);$('survey-form').querySelector('button[type=submit]').disabled=true;}}
+
+// 手機自我檢查：量測前確認這支手機回報的角度軸向與正負號是否正確。
+// 刻意與量測流程完全獨立（自己的事件監聽與狀態），不影響既有邏輯。
+(()=>{
+  // 在最小化 DOM（測試用的 vm 環境）下這些元素不存在，直接不掛載。
+  const openBtn=$('open-selfcheck'),dlg=$('selfcheck-dialog');
+  if(!openBtn||!dlg||typeof openBtn.addEventListener!=='function'||typeof dlg.showModal!=='function')return;
+  const TOL=8,STEPS=[
+    {key:'flat',label:'① 手機平放桌面，螢幕朝上',detail:'鏡頭朝向地面，應讀到約 −90°',target:-90},
+    {key:'upright',label:'② 手機直立貼牆，螢幕朝自己',detail:'鏡頭水平朝前，應讀到約 0°',target:0}];
+  let angle=null,listening=false,timer=null;const got={};
+  const read=e=>{if(e.beta==null||e.gamma==null)return;
+    angle=e.alpha==null?elevation(e.beta,e.gamma):cameraDirection(e.alpha,e.beta,e.gamma).elevation;};
+  const fmt=v=>{if(v==null)return '—';const r=(Math.round(v*10)/10)||0;return `${r>0?'+':''}${r.toFixed(1)}°`;};
+  function render(){
+    $('selfcheck-angle').textContent=fmt(angle);
+    $('selfcheck-steps').innerHTML=STEPS.map(s=>{
+      const g=got[s.key],ok=g!=null&&Math.abs(g-s.target)<=TOL;
+      return `<li><b>${s.label}</b><p class="hint">${s.detail}</p>`+
+        `<div class="selfcheck-row"><button type="button" data-step="${s.key}">記錄這一步</button>`+
+        `<span class="${g==null?'hint':ok?'ok':'bad'}">${g==null?'尚未記錄':`${fmt(g)}　${ok?'✓ 正常':'✗ 不符'}`}</span></div></li>`;}).join('');
+    const list=$('selfcheck-steps');
+    for(const b of (list.querySelectorAll?list.querySelectorAll('button[data-step]'):[]))
+      b.addEventListener('click',()=>{if(angle!=null){got[b.dataset.step]=angle;render();}});
+    const done=STEPS.every(s=>got[s.key]!=null),
+      pass=done&&STEPS.every(s=>Math.abs(got[s.key]-s.target)<=TOL);
+    $('selfcheck-verdict').textContent=!done?'兩步都記錄後才會給結論。'
+      :pass?'✓ 這支手機的角度方向正確，可以用感測器量測。'
+      :'✗ 這支手機的角度讀數不符預期。請改用量測畫面進階選項的「手動輸入角度」，並把機型告訴老師。';
+    $('selfcheck-verdict').className=!done?'hint':pass?'hint ok':'hint bad';
+  }
+  async function start(){
+    error('selfcheck-error','');
+    try{
+      if(!window.isSecureContext)throw Error('感測器需 HTTPS 安全網址；手機請開啟部署後的 GitHub Pages 網址。');
+      if(typeof DeviceOrientationEvent==='undefined')throw Error('此裝置沒有角度感測器，請改用手動輸入角度。');
+      if(typeof DeviceOrientationEvent.requestPermission==='function'){
+        const s=await DeviceOrientationEvent.requestPermission();
+        if(s!=='granted')throw Error('未取得動作感測權限，請在瀏覽器設定開啟後重試。');}
+      if(!listening){window.addEventListener('deviceorientation',read);listening=true;}
+      $('selfcheck-body').hidden=false;$('selfcheck-start').hidden=true;
+      if(!timer)timer=setInterval(()=>{if($('selfcheck-dialog').open)render();},200);
+      render();
+    }catch(e){error('selfcheck-error',e.message);}
+  }
+  $('open-selfcheck').addEventListener('click',()=>{
+    for(const k of Object.keys(got))delete got[k];
+    angle=null;$('selfcheck-body').hidden=true;$('selfcheck-start').hidden=false;
+    error('selfcheck-error','');$('selfcheck-dialog').showModal();});
+  $('close-selfcheck').addEventListener('click',()=>$('selfcheck-dialog').close());
+  $('selfcheck-start').addEventListener('click',start);
+})();
+
 init();

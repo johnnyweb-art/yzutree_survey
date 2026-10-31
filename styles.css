@@ -16,3 +16,11 @@
 .record-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.record-actions button{font-size:.78rem;min-height:38px;padding:6px 12px}.delete-record{color:#943b22;border-color:#ecc4b6}.delete-record.armed{background:#943b22;color:#fff;border-color:#943b22}.undo-delete{margin-bottom:12px;font-size:.85rem}
 .record-actions .edit-record{margin-top:0}
 @media(max-width:650px){.species-field{grid-column:1/-1}}
+.selfcheck-live{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:14px 0;padding:12px 14px;border-radius:10px;background:rgba(0,0,0,.04)}
+.selfcheck-live b{font-size:2rem;font-variant-numeric:tabular-nums}
+.selfcheck-steps{margin:0;padding-left:0;list-style:none;display:grid;gap:14px}
+.selfcheck-steps li{padding:12px 14px;border:1px solid rgba(0,0,0,.12);border-radius:10px}
+.selfcheck-steps p{margin:4px 0 10px}
+.selfcheck-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ok{color:#1b6b3a;font-weight:600}
+.bad{color:#a32020;font-weight:600}
