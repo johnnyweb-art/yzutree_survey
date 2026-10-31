@@ -58,13 +58,14 @@ export function calculate(record,species) {
   const excluded=['棕櫚','竹類'].includes(species.type);
   if (dbh<5 && !excluded) throw Error('等效胸徑未達 5 公分，不符合本課程碳盤查納入門檻。');
   const density=species.density ?? PARAMETERS.density;
-  if(excluded) return {dbh,density,excluded:true,densitySource:species.density==null?'預設密度':'對照表密度'};
+  const densitySource=species.density==null?'預設密度':`文獻密度（${species.densityBasis||'種'}階層）`;
+  if(excluded) return {dbh,density,excluded:true,densitySource};
   const agb=round1(PARAMETERS.a*(density*dbh**2*Number(record.height))**PARAMETERS.b);
   const biomass=round1(agb*(1+PARAMETERS.rootRatio));
   const carbon=round1(biomass*PARAMETERS.carbonFraction);
   const co2=round1(carbon*44/12);
   const comparison=round1(PARAMETERS.comparison*density*dbh**2*Number(record.height));
-  return {dbh,density,agb,biomass,carbon,co2,comparison,difference:(comparison-agb)/agb,excluded:false,densitySource:species.density==null?'預設密度':'對照表密度'};
+  return {dbh,density,agb,biomass,carbon,co2,comparison,difference:(comparison-agb)/agb,excluded:false,densitySource};
 }
 export function validateRecord(r,catalog,records=[]) {
   const species=catalog.species.find(s=>s.name===r.species);

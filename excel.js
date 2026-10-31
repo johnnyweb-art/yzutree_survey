@@ -43,7 +43,7 @@ export function buildWorkbook(records,template,catalog){
       const f=base[col].replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g,(all,c,absolute,n)=>Number(n)===6&&!absolute?c+rowNumber:Number(n)===405?c+absolute+lastRow:all);
       let cache;
       if(r){const s=catalog.species.find(s=>s.name===r.species);const c=result;
-        cache=[s.scientific,s.type,c.density,c.dbh,c.excluded?'不適用':c.agb,c.biomass??'',c.carbon??'',c.co2??'',c.comparison??'',c.difference??'',r.photoCount<4?'✗照片不足4張':c.excluded?`△${s.type==='棕櫚'?'棕櫚科':'竹類'}不計碳`:'△樹高為估計值',r.zone,c.densitySource==='預設密度'?'預設密度':'實測密度'][col-18];
+        cache=[s.scientific,s.type,c.density,c.dbh,c.excluded?'不適用':c.agb,c.biomass??'',c.carbon??'',c.co2??'',c.comparison??'',c.difference??'',r.photoCount<4?'✗照片不足4張':c.excluded?`△${s.type==='棕櫚'?'棕櫚科':'竹類'}不計碳`:'△樹高為估計值',r.zone,c.densitySource][col-18];
       }else cache='';
       row[col]=formula(f,cache);
     }main.push(row);

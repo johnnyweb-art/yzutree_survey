@@ -7,6 +7,10 @@ const {calculate,treeHeight,groundDistance,crownWidth,elevation,validateRecord,t
 import {buildWorkbook} from '../excel.js';
 const catalog=JSON.parse(fs.readFileSync(new URL('../data/catalog.json',import.meta.url)));
 const template=JSON.parse(fs.readFileSync(new URL('../data/workbook-template.json',import.meta.url)));
+// 課程計算表的範例值由〈參數設定〉預設密度 0.60 產生。密度對照表填入後樟樹為 0.487，
+// 為保留「與原計算表逐值相符」這項檢查，本套測試一律把樟樹還原為預設密度；
+// 對照表生效後的數值另見下方 species density from lookup table 測試。
+for(const s of catalog.species) if(s.name==='樟樹') s.density=null;
 const species=catalog.species.find(s=>s.name==='樟樹');
 const measurement={value:12,method:'測試資料／手填角度',phoneHeight:1.5,baseAngle:-10,topAngle:45,distance:8.5,recordedAt:'2026-10-02T00:00:00Z'};
 const record={id:'ZJ-9999-1',zone:'ZJ',species:'樟樹',recorder:'原型測試',studentId:'TEST9999'.replace('TEST','114'),sequence:1,date:'2026-10-02',health:'良',circumferences:[120,null,null],height:12,crownEW:8.5,crownNS:7.2,gps:{lat:24.9683,lon:121.2635,accuracy:5,timestamp:'2026-10-02T00:00:00Z'},photoCount:4,identification:'L2',inat:'',notes:'合成測試紀錄，非現場調查',savedAt:'2026-10-02T00:00:00Z',measurements:{height:measurement,ew:{...measurement,value:8.5},ns:{...measurement,value:7.2}}};
@@ -145,4 +149,20 @@ test('delete needs a second tap, can be undone, and cancels editing of that reco
  assert.match(w.storage.get('yzu-tree-survey-v1'),/ZJ-9999-2/);assert.doesNotMatch(w.storage.get('yzu-tree-survey-v1'),/ZJ-9999-1/);
  assert.equal(e('undo-delete').hidden,false);w.click('undo-delete');
  assert.equal(w.run('records.map(r=>r.id).sort().join()'),'ZJ-9999-1,ZJ-9999-2');assert.equal(e('undo-delete').hidden,true);
+});
+test('species density from lookup table',()=>{
+  const r=calculate(record,{...species,density:0.487,densityBasis:'種'});
+  assert.deepEqual([r.density,r.agb,r.biomass,r.carbon,r.co2,r.comparison],[0.487,461.9,572.8,269.2,987.1,434.1]);
+  assert.equal(r.densitySource,'文獻密度（種階層）');
+  assert.equal(calculate(record,{...species,density:0.427,densityBasis:'屬'}).densitySource,'文獻密度（屬階層）');
+  assert.equal(calculate(record,species).densitySource,'預設密度');
+});
+test('catalog carries wood density for every carbon-counted species',()=>{
+  const fresh=JSON.parse(fs.readFileSync(new URL('../data/catalog.json',import.meta.url)));
+  const need=fresh.species.filter(s=>!['棕櫚','竹類'].includes(s.type));
+  assert.equal(need.length,89);
+  assert.ok(need.every(s=>typeof s.density==='number'&&s.density>0.2&&s.density<1.2));
+  assert.ok(need.every(s=>['種','屬'].includes(s.densityBasis)&&s.densityRef==='GWDD'));
+  assert.equal(fresh.species.find(s=>s.name==='樟樹').density,0.487);
+  assert.ok(fresh.species.filter(s=>['棕櫚','竹類'].includes(s.type)).every(s=>s.density===null));
 });
