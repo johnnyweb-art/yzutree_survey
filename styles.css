@@ -15,3 +15,4 @@
 @media(max-width:650px){#measure-dialog .camera-panel{height:min(40dvh,340px)}#measure-dialog .wizard-heading{font-size:.86rem;padding:10px 12px;margin-bottom:12px}#measure-dialog .height-steps{margin-bottom:10px}.capture-button{margin-top:10px}}
 .record-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.record-actions button{font-size:.78rem;min-height:38px;padding:6px 12px}.delete-record{color:#943b22;border-color:#ecc4b6}.delete-record.armed{background:#943b22;color:#fff;border-color:#943b22}.undo-delete{margin-bottom:12px;font-size:.85rem}
 .record-actions .edit-record{margin-top:0}
+@media(max-width:650px){.species-field{grid-column:1/-1}}

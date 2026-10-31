@@ -15,7 +15,7 @@ function renderResult(){
   $('tree-id').textContent=$('student-id').value.length>=4?idValue():'尚未填寫學號';
   if(!catalog)return;
   const species=catalog.species.find(s=>s.name===$('species').value.trim());
-  $('species-info').textContent=species?`${species.scientific} · ${species.type} · ${species.density==null?'採通用密度 0.60':`木材密度 ${species.density}`}`:'99 種校園樹種，名稱與課程計算表一致。';
+  $('species-info').textContent=species?`${species.scientific} · ${species.type} · ${['棕櫚','竹類'].includes(species.type)?'依課程規定不計碳':species.density==null?'採通用密度 0.60 g/cm³':`木材密度 ${species.density} g/cm³（${species.densityBasis==='屬'?'同屬平均':'種階層'}，${species.densityRef||'GWDD'}）`}`:'從清單選擇樹種，木材密度會自動帶入。';
   try{const r=calculate(getRecord(),species??{});if(!species)throw Error('請選擇清單中的樹種。');
     $('carbon-value').textContent=r.excluded?'不適用':r.carbon.toLocaleString('zh-TW',{minimumFractionDigits:1});
     $('co2-value').textContent=r.excluded?'不計碳':`${r.co2.toLocaleString('zh-TW',{minimumFractionDigits:1})} kg`;
@@ -274,7 +274,7 @@ function checkImportedRecord(r,existing){
 $('import-json').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('備份檔過大。');const data=JSON.parse(await file.text());if(data.version!==1||!Array.isArray(data.records))throw Error('不支援此備份格式。');const next=[...records];let added=0,skipped=0;for(const raw of data.records){if(next.some(r=>r.id===raw.id)){skipped++;continue;}next.push(checkImportedRecord(raw,next));added++;}persist(next);renderRecords();toast(`還原 ${added} 筆，略過 ${skipped} 筆同編號紀錄。`);}catch(e){toast(`還原失敗：${e.message}`);}finally{$('import-json').value='';}});
 async function init(){try{
   const responses=await Promise.all([fetch('./data/catalog.json'),fetch('./data/workbook-template.json')]);if(responses.some(r=>!r.ok))throw Error('資料檔讀取失敗');[catalog,template]=await Promise.all(responses.map(r=>r.json()));
-  $('zone').innerHTML=catalog.zones.map(z=>`<option value="${esc(z.code)}">${esc(z.code)} · ${esc(z.name)}</option>`).join('');$('species-list').innerHTML=catalog.species.map(s=>`<option value="${esc(s.name)}">${esc(s.scientific)}</option>`).join('');$('date').value=localDate();
+  $('zone').innerHTML=catalog.zones.map(z=>`<option value="${esc(z.code)}">${esc(z.code)} · ${esc(z.name)}</option>`).join('');$('species').innerHTML='<option value="">請選擇樹種</option>'+['闊葉','針葉','棕櫚','竹類'].map(t=>{const g=catalog.species.filter(s=>s.type===t);return g.length?`<optgroup label="${esc(t)}（${g.length} 種）">`+g.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}　${esc(s.scientific)}</option>`).join('')+'</optgroup>':'';}).join('');$('date').value=localDate();
   try{const raw=localStorage.getItem(key);if(raw){const saved=JSON.parse(raw);if(saved.version!==1||!Array.isArray(saved.records))throw Error('版本不符');const checked=[];for(const r of saved.records)checked.push(checkImportedRecord(r,checked));records=checked;}}catch{storageFailed=true;toast('本機資料無法讀取，已停止覆寫。請保留瀏覽器資料並檢查備份。');}
   renderRecords();renderResult();
 }catch(e){error('form-error',`初始化失敗：${e.message}。請使用網頁伺服器開啟，勿直接雙擊 HTML。`);$('survey-form').querySelector('button[type=submit]').disabled=true;}}
