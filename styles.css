@@ -24,3 +24,4 @@
 .selfcheck-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .ok{color:#1b6b3a;font-weight:600}
 .bad{color:#a32020;font-weight:600}
+.inapp-banner{background:#fff0eb;border:1px solid #ecc4b6;border-radius:12px;padding:14px 16px;margin-bottom:18px;color:#943b22}.inapp-banner p{color:#7a3a25;font-size:.85rem;margin:6px 0}.inapp-banner a.primary{display:inline-block;text-decoration:none;border-radius:9px;padding:10px 16px;margin:6px 0}.export-name{font-family:monospace;font-size:.85rem;word-break:break-all;margin-bottom:12px}.export-action{display:flex;justify-content:center;align-items:center;text-decoration:none;min-height:52px;margin:0 0 10px;border-radius:9px}a.export-action.primary{color:#fff}#export-copy-text,#paste-text{font-family:monospace;font-size:.75rem}

@@ -79,3 +79,20 @@ export function validateRecord(r,catalog,records=[]) {
   if(!(r.crownEW>0 && r.crownNS>0)) throw Error('請完成東西向及南北向冠幅。');
   return calculate(r,species);
 }
+// In-app browsers (LINE, Facebook, Instagram, WeChat) silently drop file downloads.
+export function inAppBrowser(ua='') {
+  if (/\bLine\//i.test(ua)) return 'LINE';
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return 'Facebook';
+  if (/Instagram/i.test(ua)) return 'Instagram';
+  if (/MicroMessenger/i.test(ua)) return '微信';
+  return null;
+}
+export function phonePlatform(ua='',touchPoints=0) {
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && touchPoints>1)) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'desktop';
+}
+// LINE opens the page in the phone's default browser when this query parameter is present.
+export function externalBrowserUrl(href) {
+  const url=new URL(href);url.searchParams.set('openExternalBrowser','1');return url.toString();
+}

@@ -1,4 +1,4 @@
-import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1,treeHeightFromDistance,betterPosition,cameraDirection,turnDelta,crownWidthFromTurns,radians} from './core.js';
+import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1,treeHeightFromDistance,betterPosition,cameraDirection,turnDelta,crownWidthFromTurns,radians,inAppBrowser,phonePlatform,externalBrowserUrl} from './core.js';
 import {buildWorkbook} from './excel.js';
 const $=id=>document.getElementById(id),key='yzu-tree-survey-v1';
 let catalog,template,records=[],gps=null,measurements={},stream=null,sensor=null,samples=[],offset=0,mode='height',captures=[],pending=null,orientationEnabled=false,storageFailed=false,editingId=null,lastDeleted=null;
@@ -261,9 +261,35 @@ function capture(){error('measure-error','');try{
 $('capture-angle').addEventListener('click',capture);
 $('camera-panel').addEventListener('click',()=>{if(aiming()&&!pending)capture();});
 $('use-measure').addEventListener('click',()=>{if(!pending)return;measurements[mode]=pending;$(mode==='height'?'height-output':mode==='ew'?'ew-output':'ns-output').innerHTML=`${pending.value.toFixed(1)} <small>m</small>`;$('measure-dialog').close();renderResult();});
-function download(data,name,type){const url=URL.createObjectURL(new Blob([data],{type})),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-$('export-excel').addEventListener('click',()=>{try{download(buildWorkbook(records,template,catalog),`元智樹木盤查_${localDate()}.xlsx`,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('已匯出 Excel；開啟後公式會重新計算。');}catch(e){toast(`匯出失敗：${e.message}`);}});
-$('export-json').addEventListener('click',()=>download(JSON.stringify({version:1,records},null,2),`樹木盤查備份_${localDate()}.json`,'application/json'));
+// Export opens a sheet instead of auto-clicking a hidden link: phones honour a download the
+// student taps directly, Web Share reaches LINE/Email/Files, and copy works even in in-app browsers.
+const ua=()=>globalThis.navigator?.userAgent||'',inApp=()=>inAppBrowser(ua()),platform=()=>phonePlatform(ua(),globalThis.navigator?.maxTouchPoints||0);
+let exportUrl=null,exportFile=null;
+function backupText(){return JSON.stringify({version:1,records},null,2);}
+function exportHint(){
+  const where={ios:'iPhone：下載後開啟「檔案」App →「瀏覽」→「下載項目」；Safari 網址列左側也會出現下載圖示。',android:'Android：下載後從通知列打開，或到「檔案」App 的「下載」資料夾找。',desktop:'檔案會存到電腦的「下載」資料夾。'}[platform()];
+  return inApp()?`你正在 ${inApp()} 內建瀏覽器，這裡通常無法下載檔案。請改用下方「傳送／存到檔案」，或先「複製備份文字」，再用 Safari／Chrome 開啟本網站貼上還原後匯出。`:where;
+}
+function openExport(data,name,type,label){
+  if(exportUrl)URL.revokeObjectURL(exportUrl);
+  const blob=new Blob([data],{type});exportUrl=URL.createObjectURL(blob);
+  try{exportFile=new File([blob],name,{type});}catch{exportFile=null;}
+  const link=$('export-download');link.href=exportUrl;link.download=name;
+  $('export-title').textContent=`${label}已準備好`;$('export-name').textContent=name;$('export-hint').textContent=exportHint();
+  let shareable=false;try{shareable=!!(exportFile&&navigator.canShare?.({files:[exportFile]}));}catch{}
+  $('export-share').hidden=!shareable;$('export-copy-box').hidden=true;$('export-copy-text').value='';
+  $('export-dialog').showModal();
+}
+$('export-share').addEventListener('click',async()=>{try{await navigator.share({files:[exportFile],title:exportFile.name});}catch(e){if(e?.name!=='AbortError')toast('無法開啟分享，請改用下載或複製備份文字。');}});
+$('export-copy').addEventListener('click',async()=>{
+  const text=backupText();
+  try{await navigator.clipboard.writeText(text);toast(`已複製 ${records.length} 筆備份文字。可貼到 LINE 傳給自己，或到 Safari／Chrome 的「貼上備份文字還原」。`);}
+  catch{$('export-copy-box').hidden=false;$('export-copy-text').value=text;$('export-copy-text').select();toast('無法自動複製：請長按下方文字框，選「全選」→「拷貝」。');}
+});
+$('close-export').addEventListener('click',()=>$('export-dialog').close());
+$('export-dialog').addEventListener('close',()=>{if(exportUrl){const url=exportUrl;exportUrl=null;setTimeout(()=>URL.revokeObjectURL(url),60000);}});
+$('export-excel').addEventListener('click',()=>{try{openExport(buildWorkbook(records,template,catalog),`元智樹木盤查_${localDate()}.xlsx`,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Excel 檔');}catch(e){toast(`匯出失敗：${e.message}`);}});
+$('export-json').addEventListener('click',()=>{try{openExport(backupText(),`樹木盤查備份_${localDate()}.json`,'application/json','JSON 備份');}catch(e){toast(`匯出失敗：${e.message}`);}});
 function checkImportedRecord(r,existing){
   if(!r||typeof r!=='object'||!Array.isArray(r.circumferences)||r.circumferences.length!==3||typeof r.recorder!=='string'||typeof r.studentId!=='string'||typeof r.species!=='string'||typeof r.date!=='string'||typeof r.notes!=='string')throw Error('備份中的紀錄格式不正確。');
   if(r.id!==`${r.zone}-${r.studentId.slice(-4)}-${r.sequence}`)throw Error('備份中的樹木編號與調查者不符。');
@@ -271,7 +297,24 @@ function checkImportedRecord(r,existing){
   for(const [key,value] of [['height',r.height],['ew',r.crownEW],['ns',r.crownNS]]){if(!Number.isFinite(value)||!r.measurements?.[key]||r.measurements[key].value!==value)throw Error('備份缺少量測原始紀錄。');}
   return {...r,result:validateRecord(r,catalog,existing)};
 }
-$('import-json').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('備份檔過大。');const data=JSON.parse(await file.text());if(data.version!==1||!Array.isArray(data.records))throw Error('不支援此備份格式。');const next=[...records];let added=0,skipped=0;for(const raw of data.records){if(next.some(r=>r.id===raw.id)){skipped++;continue;}next.push(checkImportedRecord(raw,next));added++;}persist(next);renderRecords();toast(`還原 ${added} 筆，略過 ${skipped} 筆同編號紀錄。`);}catch(e){toast(`還原失敗：${e.message}`);}finally{$('import-json').value='';}});
+function importBackup(text){
+  let data;try{data=JSON.parse(text);}catch{throw Error('不是有效的備份文字，請確認整段都有貼上。');}
+  if(data.version!==1||!Array.isArray(data.records))throw Error('不支援此備份格式。');
+  const next=[...records];let added=0,skipped=0;
+  for(const raw of data.records){if(next.some(r=>r.id===raw.id)){skipped++;continue;}next.push(checkImportedRecord(raw,next));added++;}
+  persist(next);renderRecords();return {added,skipped};
+}
+$('import-json').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('備份檔過大。');const {added,skipped}=importBackup(await file.text());toast(`還原 ${added} 筆，略過 ${skipped} 筆同編號紀錄。`);}catch(e){toast(`還原失敗：${e.message}`);}finally{$('import-json').value='';}});
+$('open-paste').addEventListener('click',()=>{$('paste-text').value='';error('paste-error','');$('paste-dialog').showModal();});
+$('close-paste').addEventListener('click',()=>$('paste-dialog').close());
+$('paste-restore').addEventListener('click',()=>{try{const text=$('paste-text').value.trim();if(!text)throw Error('請先貼上備份文字。');const {added,skipped}=importBackup(text);$('paste-dialog').close();toast(`還原 ${added} 筆，略過 ${skipped} 筆同編號紀錄。`);}catch(e){error('paste-error',e.message);}});
+// Warn before students record anything inside an in-app browser: its storage and downloads are separate.
+(()=>{const name=inApp();if(!name)return;
+  $('inapp-name').textContent=name;$('inapp-banner').hidden=false;
+  const open=$('inapp-open');
+  if(name==='LINE'&&globalThis.location?.href){open.href=externalBrowserUrl(location.href);open.hidden=false;}else open.hidden=true;
+  $('inapp-steps').textContent=name==='LINE'?'按下方按鈕改用手機瀏覽器開啟；或點右上角 ⋮ →「以預設瀏覽器開啟」。':'點右上角 ⋯ 或 ⋮ →「在瀏覽器中開啟」。';
+})();
 async function init(){try{
   const responses=await Promise.all([fetch('./data/catalog.json'),fetch('./data/workbook-template.json')]);if(responses.some(r=>!r.ok))throw Error('資料檔讀取失敗');[catalog,template]=await Promise.all(responses.map(r=>r.json()));
   $('zone').innerHTML=catalog.zones.map(z=>`<option value="${esc(z.code)}">${esc(z.code)} · ${esc(z.name)}</option>`).join('');$('species').innerHTML='<option value="">請選擇樹種</option>'+['闊葉','針葉','棕櫚','竹類'].map(t=>{const g=catalog.species.filter(s=>s.type===t);return g.length?`<optgroup label="${esc(t)}（${g.length} 種）">`+g.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}　${esc(s.scientific)}</option>`).join('')+'</optgroup>':'';}).join('');$('date').value=localDate();
