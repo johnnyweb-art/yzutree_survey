@@ -57,7 +57,7 @@ test('GPS session stops watcher, keeps best result and ignores callbacks after c
   const elements=new Map();
   const element=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:false,disabled:false,textContent:'',events:{},addEventListener(type,fn){this.events[type]=fn;}});return elements.get(id);};
   let success,fail,cleared=null;const timers=new Map();let nextTimer=0;
-  const context=vm.createContext({document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){}},navigator:{geolocation:{watchPosition(ok,bad){success=ok;fail=bad;return 42;},clearWatch(id){cleared=id;}}},setTimeout(fn){timers.set(++nextTimer,fn);return nextTimer;},clearTimeout(id){timers.delete(id);},setInterval(){},betterPosition,Date,console});
+  const context=vm.createContext({document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){}},navigator:{geolocation:{watchPosition(ok,bad){success=ok;fail=bad;return 42;},clearWatch(id){cleared=id;}}},setTimeout(fn){timers.set(++nextTimer,fn);return nextTimer;},clearTimeout(id){timers.delete(id);},setInterval(){},...core,Date,console});
   const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/init\(\);\s*$/,'');
   vm.runInContext(source,context);
   element('at-tree').checked=true;element('get-gps').events.click();
@@ -71,11 +71,11 @@ test('GPS session stops watcher, keeps best result and ignores callbacks after c
   element('get-gps').events.click();success(pos(5));element('at-tree').checked=false;element('at-tree').events.change();assert.equal(vm.runInContext('gps',context),null);assert.match(element('gps-output').textContent,/取消/);
 });
 
-function wizardHarness(){
+function wizardHarness(extra={}){
  const elements=new Map(),storage=new Map();
- const element=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:false,disabled:false,textContent:'',innerHTML:'',open:false,scrollTop:0,events:{},querySelector(sel){return element(id+sel);},addEventListener(type,fn){this.events[type]=fn;},showModal(){this.open=true;},close(){this.open=false;},reset(){}});return elements.get(id);};
+ const element=id=>{if(!elements.has(id))elements.set(id,{value:'',checked:false,hidden:false,disabled:false,textContent:'',innerHTML:'',open:false,scrollTop:0,events:{},querySelector(sel){return element(id+sel);},addEventListener(type,fn){this.events[type]=fn;},showModal(){this.open=true;},close(){this.open=false;},reset(){},select(){}});return elements.get(id);};
  const localStorage={getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,String(v)),removeItem:k=>storage.delete(k)};
- const context=vm.createContext({...core,document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){},screen:{orientation:{angle:0}},innerWidth:390,innerHeight:844},navigator:{},localStorage,setInterval(){},setTimeout(){},clearTimeout(){},performance:{now:()=>1000},console});
+ const context=vm.createContext({...core,document:{getElementById:element,querySelectorAll:()=>[]},window:{addEventListener(){},screen:{orientation:{angle:0}},innerWidth:390,innerHeight:844},navigator:{},localStorage,setInterval(){},setTimeout(){},clearTimeout(){},performance:{now:()=>1000},console,...extra});
  vm.runInContext(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/init\(\);\s*$/,''),context);
  return {element,context,storage,run:code=>vm.runInContext(code,context),click:id=>element(id).events.click()};
 }
@@ -174,4 +174,43 @@ test('self-check reference angles hold the camera convention',()=>{
   near(elevation(180,0),90);  // 倒放 -> 鏡頭朝上
   // 畫面採 ±8° 容許範圍：軸向顛倒的手機（平放讀到 +90）必須被判為不符
   assert.ok(Math.abs(elevation(180,0)-(-90))>8);
+});
+const LINE_UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/14.16.0';
+const SAFARI_UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const ANDROID_UA='Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+test('detects in-app browsers and phone platforms',()=>{
+ assert.equal(core.inAppBrowser(LINE_UA),'LINE');assert.equal(core.inAppBrowser(SAFARI_UA),null);assert.equal(core.inAppBrowser(ANDROID_UA),null);
+ assert.equal(core.inAppBrowser('Mozilla/5.0 (iPhone) [FBAN/FBIOS;FBAV/480.0]'),'Facebook');assert.equal(core.inAppBrowser('Mozilla/5.0 Instagram 350.0'),'Instagram');
+ assert.equal(core.phonePlatform(SAFARI_UA),'ios');assert.equal(core.phonePlatform(ANDROID_UA),'android');assert.equal(core.phonePlatform('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',5),'ios');assert.equal(core.phonePlatform('Mozilla/5.0 (Windows NT 10.0)'),'desktop');
+ assert.equal(core.externalBrowserUrl('https://johnnyweb-art.github.io/yzutree_survey/'),'https://johnnyweb-art.github.io/yzutree_survey/?openExternalBrowser=1');
+ assert.equal(core.externalBrowserUrl('https://x.test/a?b=1#c'),'https://x.test/a?b=1&openExternalBrowser=1#c');
+});
+test('LINE browser shows the warning banner with an external-browser link',()=>{
+ const w=wizardHarness({navigator:{userAgent:LINE_UA},location:{href:'https://johnnyweb-art.github.io/yzutree_survey/'}}),e=w.element;
+ assert.equal(e('inapp-banner').hidden,false);assert.equal(e('inapp-name').textContent,'LINE');assert.match(e('inapp-open').href,/openExternalBrowser=1/);
+ const s=wizardHarness({navigator:{userAgent:SAFARI_UA}});assert.equal(s.element('inapp-banner').hidden,false===true);
+});
+test('export opens a sheet with a tappable download link, share when supported, and platform hint',()=>{
+ const done={...record,result:calculate(record,species)};let shared=null;
+ const w=wizardHarness({navigator:{userAgent:SAFARI_UA,canShare:o=>o.files?.length===1,share:async o=>{shared=o;}},URL,Blob,File,buildWorkbook}),e=w.element;
+ w.context.fixture=[done];w.run('records=fixture');
+ w.context.tpl=template;w.context.cat=catalog;w.run('template=tpl;catalog=cat');
+ e('export-excel').events.click();
+ assert.equal(e('export-dialog').open,true);assert.match(e('export-download').href,/^blob:/);assert.match(e('export-download').download,/\.xlsx$/);
+ assert.equal(e('export-share').hidden,false);assert.match(e('export-hint').textContent,/下載項目/);
+ e('export-share').events.click();assert.equal(shared.files[0].name,e('export-download').download);
+ const a=wizardHarness({navigator:{userAgent:LINE_UA},URL,Blob,File});a.context.fixture=[done];a.run('records=fixture');
+ a.element('export-json').events.click();assert.equal(a.element('export-share').hidden,true);assert.match(a.element('export-hint').textContent,/LINE 內建瀏覽器/);
+});
+test('copy backup falls back to a visible text box, and paste restores records',async()=>{
+ const done={...record,result:calculate(record,species)};
+ const w=wizardHarness({navigator:{userAgent:LINE_UA,clipboard:{writeText:async()=>{throw Error('denied');}}}}),e=w.element;
+ w.context.cat=catalog;w.run('catalog=cat');w.context.fixture=[done];w.run('records=fixture');
+ await e('export-copy').events.click();assert.equal(e('export-copy-box').hidden,false);
+ const text=e('export-copy-text').value;assert.match(text,/ZJ-9999-1/);
+ const fresh=wizardHarness(),f=fresh.element;fresh.context.cat=catalog;fresh.run('catalog=cat');
+ f('open-paste').events.click();assert.equal(f('paste-dialog').open,true);
+ f('paste-text').value='not json';f('paste-restore').events.click();assert.match(f('paste-error').textContent,/不是有效/);assert.equal(fresh.run('records.length'),0);
+ f('paste-text').value=text;f('paste-restore').events.click();assert.equal(fresh.run('records.length'),1);assert.equal(f('paste-dialog').open,false);
+ f('open-paste').events.click();f('paste-text').value=text;f('paste-restore').events.click();assert.equal(fresh.run('records.length'),1);
 });
