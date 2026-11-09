@@ -222,3 +222,13 @@ test('baseball field zone BQ is selectable, validates, and passes the Excel ID c
  const xml=new TextDecoder().decode(buildWorkbook([{...bq,result:calculate(record,species)}],template,catalog));
  assert.ok(xml.includes('統計摘要!$A$23:$A$36'));assert.ok(!xml.includes('$A$23:$A$35'));assert.ok(xml.includes('BQ-9999-1'));
 });
+test('resuming the app re-checks the zone list and keeps the current selection',async()=>{
+ const old={...catalog,zones:catalog.zones.filter(z=>z.code!=='BQ')};let calls=0;
+ const w=wizardHarness({fetch:async(url,opt)=>{calls++;assert.equal(opt?.cache,'no-cache');return {ok:true,json:async()=>catalog};}}),e=w.element;
+ w.context.old=old;w.run('catalog=old;fillLists()');e('zone').value='LY';
+ assert.ok(!e('zone').innerHTML.includes('BQ'));
+ await w.run('refreshLists()');assert.equal(calls,0);
+ w.run('listsCheckedAt=0');await w.run('refreshLists()');
+ assert.equal(calls,1);assert.ok(e('zone').innerHTML.includes('BQ · 棒球場'));assert.equal(e('zone').value,'LY');assert.match(e('toast').textContent,/棒球場/);
+ w.run('listsCheckedAt=0');await w.run('refreshLists()');assert.equal(calls,2);
+});
