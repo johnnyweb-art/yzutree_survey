@@ -214,3 +214,11 @@ test('copy backup falls back to a visible text box, and paste restores records',
  f('paste-text').value=text;f('paste-restore').events.click();assert.equal(fresh.run('records.length'),1);assert.equal(f('paste-dialog').open,false);
  f('open-paste').events.click();f('paste-text').value=text;f('paste-restore').events.click();assert.equal(fresh.run('records.length'),1);
 });
+test('baseball field zone BQ is selectable, validates, and passes the Excel ID check range',()=>{
+ assert.ok(catalog.zones.some(z=>z.code==='BQ'&&z.name==='棒球場'));
+ const bq={...record,id:'BQ-9999-1',zone:'BQ'};
+ assert.equal(validateRecord(bq,catalog).dbh,calculate(record,species).dbh);
+ const summary=template['統計摘要'];assert.equal(summary[35][0],'BQ');assert.match(summary[35][1],/\$A36/);
+ const xml=new TextDecoder().decode(buildWorkbook([{...bq,result:calculate(record,species)}],template,catalog));
+ assert.ok(xml.includes('統計摘要!$A$23:$A$36'));assert.ok(!xml.includes('$A$23:$A$35'));assert.ok(xml.includes('BQ-9999-1'));
+});
