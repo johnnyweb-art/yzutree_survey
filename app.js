@@ -315,9 +315,28 @@ $('paste-restore').addEventListener('click',()=>{try{const text=$('paste-text').
   if(name==='LINE'&&globalThis.location?.href){open.href=externalBrowserUrl(location.href);open.hidden=false;}else open.hidden=true;
   $('inapp-steps').textContent=name==='LINE'?'按下方按鈕改用手機瀏覽器開啟；或點右上角 ⋮ →「以預設瀏覽器開啟」。':'點右上角 ⋯ 或 ⋮ →「在瀏覽器中開啟」。';
 })();
+function fillLists(){
+  const zone=$('zone').value,species=$('species').value;
+  $('zone').innerHTML=catalog.zones.map(z=>`<option value="${esc(z.code)}">${esc(z.code)} · ${esc(z.name)}</option>`).join('');$('species').innerHTML='<option value="">請選擇樹種</option>'+['闊葉','針葉','棕櫚','竹類'].map(t=>{const g=catalog.species.filter(s=>s.type===t);return g.length?`<optgroup label="${esc(t)}（${g.length} 種）">`+g.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}　${esc(s.scientific)}</option>`).join('')+'</optgroup>':'';}).join('');
+  if(zone&&catalog.zones.some(z=>z.code===zone))$('zone').value=zone;
+  if(species&&catalog.species.some(s=>s.name===species))$('species').value=species;
+}
+// Home-screen apps are often resumed from memory, not reloaded: re-check the lists when brought back.
+let listsCheckedAt=Date.now();
+async function refreshLists(){
+  if(!catalog||Date.now()-listsCheckedAt<60000)return;listsCheckedAt=Date.now();
+  try{const r=await fetch('./data/catalog.json',{cache:'no-cache'});if(!r.ok)return;const next=await r.json();
+    if(JSON.stringify(next)===JSON.stringify(catalog))return;
+    const added=next.zones.filter(z=>!catalog.zones.some(o=>o.code===z.code)).map(z=>z.name);
+    catalog=next;fillLists();renderResult();toast(added.length?`已更新責任區：新增 ${added.join('、')}。`:'已更新樹種與責任區清單。');
+  }catch{}
+}
+document.addEventListener?.('visibilitychange',()=>{if(document.visibilityState==='visible')refreshLists();});
+window.addEventListener('pageshow',e=>{if(e.persisted)refreshLists();});
 async function init(){try{
-  const responses=await Promise.all([fetch('./data/catalog.json'),fetch('./data/workbook-template.json')]);if(responses.some(r=>!r.ok))throw Error('資料檔讀取失敗');[catalog,template]=await Promise.all(responses.map(r=>r.json()));
-  $('zone').innerHTML=catalog.zones.map(z=>`<option value="${esc(z.code)}">${esc(z.code)} · ${esc(z.name)}</option>`).join('');$('species').innerHTML='<option value="">請選擇樹種</option>'+['闊葉','針葉','棕櫚','竹類'].map(t=>{const g=catalog.species.filter(s=>s.type===t);return g.length?`<optgroup label="${esc(t)}（${g.length} 種）">`+g.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}　${esc(s.scientific)}</option>`).join('')+'</optgroup>':'';}).join('');$('date').value=localDate();
+  // no-cache: always ask GitHub Pages whether the zone/species lists changed (a cheap 304 when not).
+  const responses=await Promise.all([fetch('./data/catalog.json',{cache:'no-cache'}),fetch('./data/workbook-template.json',{cache:'no-cache'})]);if(responses.some(r=>!r.ok))throw Error('資料檔讀取失敗');[catalog,template]=await Promise.all(responses.map(r=>r.json()));
+  fillLists();$('date').value=localDate();
   try{const raw=localStorage.getItem(key);if(raw){const saved=JSON.parse(raw);if(saved.version!==1||!Array.isArray(saved.records))throw Error('版本不符');const checked=[];for(const r of saved.records)checked.push(checkImportedRecord(r,checked));records=checked;}}catch{storageFailed=true;toast('本機資料無法讀取，已停止覆寫。請保留瀏覽器資料並檢查備份。');}
   renderRecords();renderResult();
 }catch(e){error('form-error',`初始化失敗：${e.message}。請使用網頁伺服器開啟，勿直接雙擊 HTML。`);$('survey-form').querySelector('button[type=submit]').disabled=true;}}
