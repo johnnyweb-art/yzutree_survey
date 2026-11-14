@@ -256,10 +256,22 @@ test('export marks missing coordinates and leaves the cells empty',()=>{
   assert.ok(manual.includes('24.123456'));
   assert.ok(!manual.includes('定位待補'));
 });
-test('the page shows the package version in both the header and the footer',()=>{
-  // 手機上看得到的是 footer 那個；三處只要有一處沒跟著改，學生就無法確認自己開的是哪一版。
+test('every version string and cache-busting query matches package.json',()=>{
+  // 三處顯示要一致，否則學生看到的版本是錯的。
+  // ?v= 也要一致：每個檔案在 GitHub Pages 有各自的 10 分鐘快取，漏改任何一個，
+  // index.html 會更新但 core.js 仍是舊的——版本號看起來對，行為卻是舊的。
   const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url)));
+  const v=pkg.version;
   const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
-  assert.ok(html.includes(`<b>${pkg.version}</b>`),'header 版本與 package.json 不一致');
-  assert.ok(html.includes(`<b id="app-version">v${pkg.version}</b>`),'footer 版本與 package.json 不一致');
+  const appjs=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  const exceljs=fs.readFileSync(new URL('../excel.js',import.meta.url),'utf8');
+  assert.ok(html.includes(`<b>${v}</b>`),'header 版本不一致');
+  assert.ok(html.includes(`<b id="app-version">v${v}</b>`),'footer 版本不一致');
+  assert.ok(html.includes(`./styles.css?v=${v}`),'styles.css 的 ?v= 不一致');
+  assert.ok(html.includes(`./app.js?v=${v}`),'app.js 的 ?v= 不一致');
+  assert.ok(appjs.includes(`'./core.js?v=${v}'`),'app.js 匯入 core.js 的 ?v= 不一致');
+  assert.ok(appjs.includes(`'./excel.js?v=${v}'`),'app.js 匯入 excel.js 的 ?v= 不一致');
+  assert.ok(exceljs.includes(`'./core.js?v=${v}'`),'excel.js 匯入 core.js 的 ?v= 不一致');
+  // 不應殘留沒帶版本的引用
+  assert.ok(!/src="\.\/app\.js"/.test(html)&&!/href="\.\/styles\.css"/.test(html),'仍有未帶版本的資源引用');
 });

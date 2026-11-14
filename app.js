@@ -1,5 +1,5 @@
-import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1,treeHeightFromDistance,betterPosition,cameraDirection,turnDelta,crownWidthFromTurns,radians,inAppBrowser,phonePlatform,externalBrowserUrl} from './core.js';
-import {buildWorkbook} from './excel.js';
+import {calculate,validateRecord,elevation,treeHeight,groundDistance,round1,treeHeightFromDistance,betterPosition,cameraDirection,turnDelta,crownWidthFromTurns,radians,inAppBrowser,phonePlatform,externalBrowserUrl} from './core.js?v=0.6.8';
+import {buildWorkbook} from './excel.js?v=0.6.8';
 const $=id=>document.getElementById(id),key='yzu-tree-survey-v1';
 let catalog,template,records=[],gps=null,measurements={},stream=null,sensor=null,samples=[],offset=0,mode='height',captures=[],pending=null,orientationEnabled=false,storageFailed=false,editingId=null,lastDeleted=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

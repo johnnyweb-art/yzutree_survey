@@ -196,3 +196,12 @@ node server.mjs
 - 修正手機上看不到版本的問題：原本窄螢幕的 CSS 是 `.prototype b{display:none}`，把 header 的版本號藏起來、只留「校園量測原型」字樣。現在相反——手機上隱藏標籤文字、顯示版本徽章，不必捲動即可確認。
 - 新增測試，比對 package.json 的版本與 index.html 中 header、footer 兩處的字串，避免日後只改其中一處造成漂移。
 - 僅介面與文件變動，碳存量公式、參數與 Excel 匯出皆未更動。33 項測試通過。
+
+## 0.6.8 讓手機真的拿得到新版（2026-11-14）
+
+- 問題：GitHub Pages 對每個檔案各給 `Cache-Control: max-age=600`，而且**彼此獨立**。原本 index.html 直接引用 `./app.js`、`./styles.css`，app.js 又 import `./core.js`，因此可能出現 index.html 已更新（版本徽章顯示新版）但 core.js 仍是舊的——版本號看起來對，行為卻是舊的。
+- 修正：資源網址一律帶版本參數（`./app.js?v=0.6.8`、`./styles.css?v=0.6.8`），模組 import 也帶（`./core.js?v=0.6.8`、`./excel.js?v=0.6.8`）。index.html 一旦更新，樣式與三個程式檔會一起換成新的。
+- `data/catalog.json` 與 `data/workbook-template.json` 本來就以 `{cache:'no-cache'}` 取得，會強制回源驗證，不受影響。
+- index.html 本身仍受 GitHub Pages 的 10 分鐘快取規範，無法由本專案設定標頭；要立即取得可在網址後加任意查詢字串（例如 `?r=1`）強制繞過。
+- 版本一致性測試擴充到涵蓋全部 `?v=`，漏改任何一處即測試失敗。33 項測試通過。
+- 碳存量公式、參數與 Excel 匯出皆未變動。

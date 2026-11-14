@@ -1,6 +1,6 @@
 // Dependency-free OOXML export. ZIP entries are stored, not compressed.
 // Formulas come from the supplied course workbook; user text is always inlineStr.
-import {calculate} from './core.js';
+import {calculate} from './core.js?v=0.6.8';
 const encoder=new TextEncoder();
 const xml=s=>String(s??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function column(n){let s='';for(n++;n;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s;}
