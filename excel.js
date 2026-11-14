@@ -28,7 +28,7 @@ function sheetXml(rows,main=false){
     return typeof v==='number'?`<c r="${ref}" s="${style}"><v>${v}</v></c>`:`<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(v)}</t></is></c>`;
   }).join('')}</row>`).join('')}</sheetData>${main?`<autoFilter ref="A2:AE${rows.length}"/>`:''}</worksheet>`;
 }
-function notes(r){return [r.notes,'手機原型；樹高／冠幅為估測；平地幾何法',r.gps?.accuracy!=null?`GPS 精度約 ${r.gps.accuracy.toFixed(1)} m`:'手填座標',r.photoCount<4?'照片不足4張，待補':null].filter(Boolean).join('；');}
+function notes(r){return [r.notes,'手機原型；樹高／冠幅為估測；平地幾何法',r.gps==null?'定位待補':r.gps.accuracy!=null?`GPS 精度約 ${r.gps.accuracy.toFixed(1)} m`:'手填座標',r.photoCount<4?'照片不足4張，待補':null].filter(Boolean).join('；');}
 export function buildWorkbook(records,template,catalog){
   const sheets=Object.fromEntries(Object.entries(template).map(([name,rows])=>[name,asTemplate(rows)]));
   const main=sheets['填寫表'];main.splice(5);
@@ -36,7 +36,7 @@ export function buildWorkbook(records,template,catalog){
   for(let index=0;index<lastRow-5;index++){
     const r=records[index],rowNumber=index+6,row=Array(31).fill(null);let result;
     if(r){
-      row.splice(0,18,r.id,r.species,r.circumferences[0],r.circumferences[1]??null,r.circumferences[2]??null,r.height,'估計',r.crownEW,r.crownNS,r.gps.lat,r.gps.lon,r.health,r.photoCount,r.inat||null,r.identification,`${r.recorder} ${r.studentId}`,r.date,notes(r));
+      row.splice(0,18,r.id,r.species,r.circumferences[0],r.circumferences[1]??null,r.circumferences[2]??null,r.height,'估計',r.crownEW,r.crownNS,r.gps?.lat??null,r.gps?.lon??null,r.health,r.photoCount,r.inat||null,r.identification,`${r.recorder} ${r.studentId}`,r.date,notes(r));
       result=calculate(r,catalog.species.find(s=>s.name===r.species));
     }
     for(let col=18;col<31;col++){
@@ -50,7 +50,7 @@ export function buildWorkbook(records,template,catalog){
   }
   // Keep source formulas, including their rounding order and example exclusion.
   for(const rows of Object.values(sheets))for(const row of rows)for(const v of row)if(v&&typeof v==='object'&&v.formula)v.formula=v.formula.replace(/\$405\b/g,'$'+lastRow);
-  sheets['量測原始紀錄']=[['手機量測原始紀錄｜0.1｜未經現場精度驗證'],['編號','儲存時間','GPS精度 m','樹高方法','鏡頭高 m','樹基角 °','樹頂角 °','水平距離 m','東西冠幅方法','東西鏡頭高 m','東西俯角 °','南北冠幅方法','南北鏡頭高 m','南北俯角 °','高度量測JSON','東西量測JSON','南北量測JSON'],...records.map(r=>{const h=r.measurements.height,e=r.measurements.ew,n=r.measurements.ns;return [r.id,r.savedAt,r.gps.accuracy,h.method,h.phoneHeight,h.baseAngle,h.topAngle,h.distance,e.method,e.phoneHeight,e.baseAngle,n.method,n.phoneHeight,n.baseAngle,JSON.stringify(h),JSON.stringify(e),JSON.stringify(n)];})];
+  sheets['量測原始紀錄']=[['手機量測原始紀錄｜0.1｜未經現場精度驗證'],['編號','儲存時間','GPS精度 m','樹高方法','鏡頭高 m','樹基角 °','樹頂角 °','水平距離 m','東西冠幅方法','東西鏡頭高 m','東西俯角 °','南北冠幅方法','南北鏡頭高 m','南北俯角 °','高度量測JSON','東西量測JSON','南北量測JSON'],...records.map(r=>{const h=r.measurements.height,e=r.measurements.ew,n=r.measurements.ns;return [r.id,r.savedAt,r.gps?.accuracy??null,h.method,h.phoneHeight,h.baseAngle,h.topAngle,h.distance,e.method,e.phoneHeight,e.baseAngle,n.method,n.phoneHeight,n.baseAngle,JSON.stringify(h),JSON.stringify(e),JSON.stringify(n)];})];
   const names=Object.keys(sheets),files={};
   files['[Content_Types].xml']=`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${names.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`;
   files['_rels/.rels']='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';

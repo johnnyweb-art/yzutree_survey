@@ -66,7 +66,9 @@ function editRecord(r){
   const fields={zone:r.zone,species:r.species,recorder:r.recorder,'student-id':r.studentId,sequence:r.sequence,date:r.date,health:r.health,c1:r.circumferences[0],c2:r.circumferences[1]??'',c3:r.circumferences[2]??'','photo-count':r.photoCount,identification:r.identification,inat:r.inat,notes:r.notes};
   for(const [id,value] of Object.entries(fields))$(id).value=value;
   for(const [key,id] of [['height','height-output'],['ew','ew-output'],['ns','ns-output']])$(id).innerHTML=`${measurements[key].value.toFixed(1)} <small>m</small>`;
-  $('gps-output').textContent=`${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}｜精度約 ${Math.round(gps.accuracy)} m`;
+  $('gps-lat').value=gps?gps.lat:'';$('gps-lon').value=gps?gps.lon:'';
+  $('gps-output').textContent=gps==null?'定位待補：未填座標仍可保存與匯出。'
+    :`${gps.lat.toFixed(6)}, ${gps.lon.toFixed(6)}｜${gps.accuracy!=null?`精度約 ${Math.round(gps.accuracy)} m`:'手動輸入，無精度資料'}`;
   $('save-label').textContent='儲存修正並重新計算';$('cancel-edit').hidden=false;error('form-error','');renderResult();showPage('survey');
 }
 function cancelEdit(navigate=true){editingId=null;$('save-label').textContent='儲存這棵樹並計算';$('cancel-edit').hidden=true;$('survey-form').reset();$('date').value=localDate();gps=null;measurements={};for(const id of ['height-output','ew-output','ns-output'])$(id).innerHTML='— <small>m</small>';$('gps-output').textContent='請站在樹旁取得 GPS';renderResult();if(navigate)showPage('records');}
@@ -81,6 +83,15 @@ function finishGPS(message=''){
 }
 $('finish-gps').addEventListener('click',()=>finishGPS());
 $('at-tree').addEventListener('change',()=>{if(!$('at-tree').checked&&gpsRun){gpsRun.best=null;finishGPS('已取消。請到樹幹旁站定後重新定位。');}});
+$('apply-gps').addEventListener('click',()=>{
+  const lat=Number($('gps-lat').value),lon=Number($('gps-lon').value);
+  if($('gps-lat').value.trim()===''||$('gps-lon').value.trim()===''||!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){
+    error('form-error','座標不正確：緯度須介於 −90～90，經度須介於 −180～180。');return;}
+  error('form-error','');gps={lat,lon,accuracy:null,source:'手動輸入'};
+  $('gps-output').textContent=`${lat.toFixed(6)}, ${lon.toFixed(6)}｜手動輸入，無精度資料`;renderResult();});
+$('clear-gps').addEventListener('click',()=>{
+  gps=null;$('gps-lat').value='';$('gps-lon').value='';
+  $('gps-output').textContent='定位待補：未填座標仍可保存與匯出。';renderResult();});
 $('get-gps').addEventListener('click',()=>{
   if(!$('at-tree').checked){toast('先走到樹幹旁，勾選站位確認。GPS 不用在量樹高的遠處取得。');return;}
   if(!navigator.geolocation){toast('此瀏覽器不支援定位，請改用手機 Safari 或 Chrome。');return;}

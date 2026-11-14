@@ -75,7 +75,7 @@ export function validateRecord(r,catalog,records=[]) {
   if(!Number.isInteger(r.sequence)||r.sequence<1||r.sequence>99) throw Error('樹木序號須為 1–99。');
   if(records.some(x=>x.id===r.id)) throw Error('此樹木編號已存在，請更換序號。');
   if(!r.date) throw Error('請填寫調查日期。');
-  if(!r.gps || !Number.isFinite(r.gps.lat)||!Number.isFinite(r.gps.lon)||Math.abs(r.gps.lat)>90||Math.abs(r.gps.lon)>180) throw Error('請先取得樹旁 GPS 座標。');
+  if(r.gps!=null && (!Number.isFinite(r.gps.lat)||!Number.isFinite(r.gps.lon)||Math.abs(r.gps.lat)>90||Math.abs(r.gps.lon)>180)) throw Error('座標不正確：緯度須介於 −90～90，經度須介於 −180～180。');
   if(!(r.crownEW>0 && r.crownNS>0)) throw Error('請完成東西向及南北向冠幅。');
   return calculate(r,species);
 }

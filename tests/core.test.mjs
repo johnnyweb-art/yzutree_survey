@@ -21,7 +21,7 @@ test('known geometric setup recovers distance and height',()=>{const base=-Math.
 test('reject unsuitable geometry and top angles',()=>{for(const a of [-1,0,10,-80])assert.throws(()=>groundDistance(1.5,a));assert.throws(()=>treeHeight(1.5,-10,70));assert.throws(()=>treeHeight(0,-10,30));});
 test('rear camera elevation mapping',()=>{assert.ok(Math.abs(elevation(90,0))<1e-10);assert.ok(Math.abs(elevation(80,0)+10)<1e-10);assert.ok(Math.abs(elevation(120,0)-30)<1e-10);});
 test('first circumference mandatory and infinite height invalid',()=>{assert.throws(()=>calculate({...record,circumferences:[null,60,null]},species));assert.throws(()=>calculate({...record,height:Infinity},species));});
-test('required GPS, duplicate IDs, species and crown rejected',()=>{assert.equal(validateRecord(record,catalog).carbon,330);assert.throws(()=>validateRecord({...record,gps:null},catalog));assert.throws(()=>validateRecord(record,catalog,[record]));assert.throws(()=>validateRecord({...record,species:'不明'},catalog));assert.throws(()=>validateRecord({...record,crownNS:0},catalog));});
+test('duplicate IDs, species and crown rejected',()=>{assert.equal(validateRecord(record,catalog).carbon,330);assert.throws(()=>validateRecord(record,catalog,[record]));assert.throws(()=>validateRecord({...record,species:'不明'},catalog));assert.throws(()=>validateRecord({...record,crownNS:0},catalog));});
 test('export original formulas, raw data, cached results and safe strings',()=>{
   const bytes=buildWorkbook([record,{...record,id:'ZJ-9999-2',sequence:2,notes:'=HYPERLINK("evil")'}],template,catalog);assert.equal(new DataView(bytes.buffer).getUint32(0,true),0x04034b50);
   const text=new TextDecoder().decode(bytes);assert.ok(text.includes('參數設定!$B$4*($U6*$V6^2*$F6)^參數設定!$B$5'));assert.ok(text.includes('量測原始紀錄'));assert.ok(text.includes('<v>1210</v>'));assert.ok(text.includes('<t xml:space="preserve">=HYPERLINK'));
@@ -231,4 +231,28 @@ test('resuming the app re-checks the zone list and keeps the current selection',
  w.run('listsCheckedAt=0');await w.run('refreshLists()');
  assert.equal(calls,1);assert.ok(e('zone').innerHTML.includes('BQ · 棒球場'));assert.equal(e('zone').value,'LY');assert.match(e('toast').textContent,/棒球場/);
  w.run('listsCheckedAt=0');await w.run('refreshLists()');assert.equal(calls,2);
+});
+
+test('a record saves and exports without coordinates',()=>{
+  // 部分學生手機定位失效，不能因此擋住保存與匯出；座標標為待補，之後補上。
+  const noGps={...record,gps:null};
+  assert.equal(validateRecord(noGps,catalog).carbon,330);
+  const manual={...record,gps:{lat:24.9683,lon:121.2635,accuracy:null,source:'手動輸入'}};
+  assert.equal(validateRecord(manual,catalog).carbon,330);
+  // 有填就必須合理，避免把打錯的座標當成有效資料
+  assert.throws(()=>validateRecord({...record,gps:{lat:95,lon:121}},catalog));
+  assert.throws(()=>validateRecord({...record,gps:{lat:24.9,lon:200}},catalog));
+  assert.throws(()=>validateRecord({...record,gps:{lat:'x',lon:121}},catalog));
+});
+test('export marks missing coordinates and leaves the cells empty',()=>{
+  // 用範本範例列沒有的座標，才能確定比對到的是這筆紀錄自己的格子。
+  const uniq={lat:24.123456,lon:121.654321,accuracy:null,source:'手動輸入'};
+  const blank=new TextDecoder().decode(buildWorkbook([{...record,gps:null}],template,catalog));
+  assert.ok(blank.includes('定位待補'));
+  assert.ok(!blank.includes('24.123456'));
+  assert.ok(blank.includes('<v>1210</v>'));  // 沒有座標不影響碳計算
+  const manual=new TextDecoder().decode(buildWorkbook([{...record,gps:uniq}],template,catalog));
+  assert.ok(manual.includes('手填座標'));
+  assert.ok(manual.includes('24.123456'));
+  assert.ok(!manual.includes('定位待補'));
 });
