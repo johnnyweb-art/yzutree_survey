@@ -256,3 +256,10 @@ test('export marks missing coordinates and leaves the cells empty',()=>{
   assert.ok(manual.includes('24.123456'));
   assert.ok(!manual.includes('定位待補'));
 });
+test('the page shows the package version in both the header and the footer',()=>{
+  // 手機上看得到的是 footer 那個；三處只要有一處沒跟著改，學生就無法確認自己開的是哪一版。
+  const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url)));
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.ok(html.includes(`<b>${pkg.version}</b>`),'header 版本與 package.json 不一致');
+  assert.ok(html.includes(`<b id="app-version">v${pkg.version}</b>`),'footer 版本與 package.json 不一致');
+});
